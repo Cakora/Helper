@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("DataAccessLayer.Ado.Tests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1d37c201d2ee981aa3a9a35d6580af768fca4053")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b23c6398633d5ab1cfcce796ec5128d5c9fe580a")]
 [assembly: System.Reflection.AssemblyProductAttribute("DataAccessLayer.Ado.Tests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("DataAccessLayer.Ado.Tests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
