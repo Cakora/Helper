@@ -1,0 +1,55 @@
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio cache/options
+.vs/
+.vscode/
+
+# Test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.VisualState.xml
+TestResult.xml
+*.trx
+
+# NuGet
+*.nupkg
+*.snupkg
+**/packages/*
+
+# Build artifacts
+*.dll
+*.pdb
+*.exe
+*.cache
+*.props
+*.targets
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Benchmark results
+BenchmarkDotNet.Artifacts/
+
+# .NET SDK
+.dotnet/
+.dotnet-sdk/
+
+# Temporary files
+tmp/
+tmp_patch/
