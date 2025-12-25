@@ -77,11 +77,29 @@ namespace DataAccessLayer.Tests;
             Assert.True(enumerated);
         }
 
+        [Fact]
+        public void StreamAsync_ThrowsWhenMapperIsNull()
+        {
+            var helper = CreateHelper(new StreamingCommandFactory());
+            var request = new DbCommandRequest { CommandText = "SELECT Text" };
+
+            Assert.Throws<ArgumentNullException>(() => helper.StreamAsync<string>(request, mapper: null!));
+        }
+
+        [Fact]
+        public void StreamAsync_ThrowsWhenCommandTextMissing()
+        {
+            var helper = CreateHelper(new StreamingCommandFactory());
+            var request = new DbCommandRequest { CommandText = "   " };
+
+            Assert.Throws<ArgumentException>(() => helper.StreamAsync(request, reader => reader.GetString(reader.GetOrdinal("Text"))));
+        }
+
         private static IDatabaseHelper CreateHelper(IDbCommandFactory commandFactory)
         {
             var connectionFactory = new FakeConnectionFactory();
             var scopeManager = new ConnectionScopeManager(connectionFactory, Options);
-        var helperOptions = new DbHelperOptions();
+            var helperOptions = new DbHelperOptions();
         var telemetry = new DataAccessTelemetry(helperOptions);
         var rowMapperFactory = new RowMapperFactory(helperOptions);
         var features = DalFeatures.Default;
