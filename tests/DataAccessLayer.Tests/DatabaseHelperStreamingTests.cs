@@ -19,10 +19,10 @@ namespace DataAccessLayer.Tests;
 
 #nullable enable
 
-public sealed class DatabaseHelperStreamingTests
-{
-    private static readonly DatabaseOptions Options = new()
+    public sealed class DatabaseHelperStreamingTests
     {
+        private static readonly DatabaseOptions Options = new()
+        {
         Provider = DatabaseProvider.SqlServer,
         ConnectionString = "Server=.;Database=Fake;Trusted_Connection=True;",
         Resilience = new ResilienceOptions { EnableCommandRetries = false }
@@ -52,12 +52,35 @@ public sealed class DatabaseHelperStreamingTests
 
         Assert.Equal(5, count);
         Assert.Equal("Hello", writer.ToString());
-    }
+        }
 
-    private static IDatabaseHelper CreateHelper(IDbCommandFactory commandFactory)
-    {
-        var connectionFactory = new FakeConnectionFactory();
-        var scopeManager = new ConnectionScopeManager(connectionFactory, Options);
+        [Fact]
+        public async Task StreamAsync_AppendsSequentialAccessFlagToCustomBehavior()
+        {
+            var factory = new StreamingCommandFactory();
+            var helper = CreateHelper(factory);
+            var request = new DbCommandRequest
+            {
+                CommandText = "SELECT Text",
+                CommandBehavior = CommandBehavior.SingleResult
+            };
+
+            var enumerated = false;
+            await foreach (var _ in helper.StreamAsync(request, reader => reader.GetString(1)))
+            {
+                enumerated = true;
+            }
+
+            var command = Assert.IsType<FakeCommand>(factory.LastCommand);
+            Assert.True(command.LastBehavior.HasFlag(CommandBehavior.SequentialAccess));
+            Assert.True(command.LastBehavior.HasFlag(CommandBehavior.SingleResult));
+            Assert.True(enumerated);
+        }
+
+        private static IDatabaseHelper CreateHelper(IDbCommandFactory commandFactory)
+        {
+            var connectionFactory = new FakeConnectionFactory();
+            var scopeManager = new ConnectionScopeManager(connectionFactory, Options);
         var helperOptions = new DbHelperOptions();
         var telemetry = new DataAccessTelemetry(helperOptions);
         var rowMapperFactory = new RowMapperFactory(helperOptions);
@@ -72,17 +95,28 @@ public sealed class DatabaseHelperStreamingTests
             features,
             Array.Empty<IValidator<DbCommandRequest>>(),
             rowMapperFactory);
-    }
+        }
 
-    private sealed class StreamingCommandFactory : IDbCommandFactory
-    {
-        public DbCommand Rent(DbConnection connection, DbCommandRequest request) => new FakeCommand();
+        private sealed class StreamingCommandFactory : IDbCommandFactory
+        {
+            public FakeCommand? LastCommand { get; private set; }
 
-        public Task<DbCommand> RentAsync(DbConnection connection, DbCommandRequest request, CancellationToken cancellationToken = default)
-            => Task.FromResult<DbCommand>(new FakeCommand());
+            public DbCommand Rent(DbConnection connection, DbCommandRequest request)
+            {
+                var command = new FakeCommand();
+                LastCommand = command;
+                return command;
+            }
 
-        public void Return(DbCommand command) => command.Dispose();
-    }
+            public Task<DbCommand> RentAsync(DbConnection connection, DbCommandRequest request, CancellationToken cancellationToken = default)
+            {
+                var command = new FakeCommand();
+                LastCommand = command;
+                return Task.FromResult<DbCommand>(command);
+            }
+
+            public void Return(DbCommand command) => command.Dispose();
+        }
 
     private sealed class FakeConnectionFactory : IDbConnectionFactory
     {
@@ -109,6 +143,8 @@ public sealed class DatabaseHelperStreamingTests
     {
         private readonly FakeDataReader _reader = new();
 
+        public CommandBehavior LastBehavior { get; private set; } = CommandBehavior.Default;
+
         [System.Diagnostics.CodeAnalysis.AllowNull]
         public override string CommandText { get; set; } = string.Empty;
         public override int CommandTimeout { get; set; } = 30;
@@ -128,9 +164,17 @@ public sealed class DatabaseHelperStreamingTests
         public override object ExecuteScalar() => new object();
         public override void Prepare() { }
         protected override DbParameter CreateDbParameter() => new FakeParameter();
-        protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior) => _reader;
+        protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
+        {
+            LastBehavior = behavior;
+            return _reader;
+        }
+
         protected override Task<DbDataReader> ExecuteDbDataReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
-            => Task.FromResult<DbDataReader>(_reader);
+        {
+            LastBehavior = behavior;
+            return Task.FromResult<DbDataReader>(_reader);
+        }
     }
 
     private sealed class FakeDataReader : DbDataReader

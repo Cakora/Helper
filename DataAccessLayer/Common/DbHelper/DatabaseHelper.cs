@@ -333,12 +333,10 @@ public sealed class DatabaseHelper : IDatabaseHelper
             ApplyScopedTransaction(innerRequest, scope, command);
             var activity = StartActivity(nameof(StreamAsync), innerRequest);
             try
-            {
-                var behavior = innerRequest.CommandBehavior == CommandBehavior.Default
-                    ? CommandBehavior.SequentialAccess
-                    : innerRequest.CommandBehavior;
+                {
+                    var behavior = EnsureSequentialBehavior(innerRequest.CommandBehavior);
 
-                await using var reader = await ExecuteReaderWithFallbackAsync(innerRequest, command, behavior, innerToken).ConfigureAwait(false);
+                    await using var reader = await ExecuteReaderWithFallbackAsync(innerRequest, command, behavior, innerToken).ConfigureAwait(false);
                 while (await reader.ReadAsync(innerToken).ConfigureAwait(false))
                 {
                     yield return innerMapper(reader);
