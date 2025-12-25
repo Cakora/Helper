@@ -9173,40 +9173,39 @@
     ]
   },
   "packageFolders": {
-    "/Users/pranavpatil/.nuget/packages/": {}
+    "/home/runner/work/Helper/.codeql-scratch/dbs/csharp/working/packages": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/Users/pranavpatil/Desktop/Helper/tests/DataAccessLayer.Tests/DataAccessLayer.Tests.csproj",
+      "projectUniqueName": "/home/runner/work/Helper/Helper/tests/DataAccessLayer.Tests/DataAccessLayer.Tests.csproj",
       "projectName": "DataAccessLayer.Tests",
-      "projectPath": "/Users/pranavpatil/Desktop/Helper/tests/DataAccessLayer.Tests/DataAccessLayer.Tests.csproj",
-      "packagesPath": "/Users/pranavpatil/.nuget/packages/",
-      "outputPath": "/Users/pranavpatil/Desktop/Helper/tests/DataAccessLayer.Tests/obj/",
+      "projectPath": "/home/runner/work/Helper/Helper/tests/DataAccessLayer.Tests/DataAccessLayer.Tests.csproj",
+      "packagesPath": "/home/runner/work/Helper/.codeql-scratch/dbs/csharp/working/packages",
+      "outputPath": "/home/runner/work/Helper/Helper/tests/DataAccessLayer.Tests/obj/",
       "projectStyle": "PackageReference",
       "centralPackageVersionsManagementEnabled": true,
       "configFilePaths": [
-        "/Users/pranavpatil/.nuget/NuGet/NuGet.Config"
+        "/home/runner/.nuget/NuGet/NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
       ],
       "sources": {
-        "/usr/local/share/dotnet/library-packs": {},
         "https://api.nuget.org/v3/index.json": {}
       },
       "frameworks": {
         "net8.0": {
           "targetAlias": "net8.0",
           "projectReferences": {
-            "/Users/pranavpatil/Desktop/Helper/DataAccessLayer.Ado/DataAccessLayer.Ado.csproj": {
-              "projectPath": "/Users/pranavpatil/Desktop/Helper/DataAccessLayer.Ado/DataAccessLayer.Ado.csproj"
+            "/home/runner/work/Helper/Helper/DataAccessLayer.Ado/DataAccessLayer.Ado.csproj": {
+              "projectPath": "/home/runner/work/Helper/Helper/DataAccessLayer.Ado/DataAccessLayer.Ado.csproj"
             },
-            "/Users/pranavpatil/Desktop/Helper/DataAccessLayer.Ef/DataAccessLayer.Ef.csproj": {
-              "projectPath": "/Users/pranavpatil/Desktop/Helper/DataAccessLayer.Ef/DataAccessLayer.Ef.csproj"
+            "/home/runner/work/Helper/Helper/DataAccessLayer.Ef/DataAccessLayer.Ef.csproj": {
+              "projectPath": "/home/runner/work/Helper/Helper/DataAccessLayer.Ef/DataAccessLayer.Ef.csproj"
             },
-            "/Users/pranavpatil/Desktop/Helper/DataAccessLayer/DataAccessLayer.csproj": {
-              "projectPath": "/Users/pranavpatil/Desktop/Helper/DataAccessLayer/DataAccessLayer.csproj"
+            "/home/runner/work/Helper/Helper/DataAccessLayer/DataAccessLayer.csproj": {
+              "projectPath": "/home/runner/work/Helper/Helper/DataAccessLayer/DataAccessLayer.csproj"
             }
           }
         }
@@ -9325,12 +9324,22 @@
         ],
         "assetTargetFallback": true,
         "warn": true,
+        "downloadDependencies": [
+          {
+            "name": "Microsoft.AspNetCore.App.Ref",
+            "version": "[8.0.22, 8.0.22]"
+          },
+          {
+            "name": "Microsoft.NETCore.App.Ref",
+            "version": "[8.0.22, 8.0.22]"
+          }
+        ],
         "frameworkReferences": {
           "Microsoft.NETCore.App": {
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/8.0.416/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/8.0.416/PortableRuntimeIdentifierGraph.json"
       }
     }
   }
