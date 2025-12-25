@@ -1,38 +1,37 @@
 {
   "format": 1,
   "restore": {
-    "/Users/pranavpatil/Desktop/Helper/CoreBusiness/CoreBusiness.csproj": {}
+    "/home/runner/work/Helper/Helper/CoreBusiness/CoreBusiness.csproj": {}
   },
   "projects": {
-    "/Users/pranavpatil/Desktop/Helper/CoreBusiness/CoreBusiness.csproj": {
+    "/home/runner/work/Helper/Helper/CoreBusiness/CoreBusiness.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/pranavpatil/Desktop/Helper/CoreBusiness/CoreBusiness.csproj",
+        "projectUniqueName": "/home/runner/work/Helper/Helper/CoreBusiness/CoreBusiness.csproj",
         "projectName": "CoreBusiness",
-        "projectPath": "/Users/pranavpatil/Desktop/Helper/CoreBusiness/CoreBusiness.csproj",
-        "packagesPath": "/Users/pranavpatil/.nuget/packages/",
-        "outputPath": "/Users/pranavpatil/Desktop/Helper/CoreBusiness/obj/",
+        "projectPath": "/home/runner/work/Helper/Helper/CoreBusiness/CoreBusiness.csproj",
+        "packagesPath": "/home/runner/work/Helper/.codeql-scratch/dbs/csharp/working/packages",
+        "outputPath": "/home/runner/work/Helper/Helper/CoreBusiness/obj/",
         "projectStyle": "PackageReference",
         "centralPackageVersionsManagementEnabled": true,
         "configFilePaths": [
-          "/Users/pranavpatil/.nuget/NuGet/NuGet.Config"
+          "/home/runner/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
         ],
         "sources": {
-          "/usr/local/share/dotnet/library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "/Users/pranavpatil/Desktop/Helper/DataAccessLayer/DataAccessLayer.csproj": {
-                "projectPath": "/Users/pranavpatil/Desktop/Helper/DataAccessLayer/DataAccessLayer.csproj"
+              "/home/runner/work/Helper/Helper/DataAccessLayer/DataAccessLayer.csproj": {
+                "projectPath": "/home/runner/work/Helper/Helper/DataAccessLayer/DataAccessLayer.csproj"
               },
-              "/Users/pranavpatil/Desktop/Helper/Shared/Shared.csproj": {
-                "projectPath": "/Users/pranavpatil/Desktop/Helper/Shared/Shared.csproj"
+              "/home/runner/work/Helper/Helper/Shared/Shared.csproj": {
+                "projectPath": "/home/runner/work/Helper/Helper/Shared/Shared.csproj"
               }
             }
           }
@@ -126,41 +125,50 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[8.0.22, 8.0.22]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[8.0.22, 8.0.22]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/8.0.416/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/8.0.416/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "/Users/pranavpatil/Desktop/Helper/DataAccessLayer/DataAccessLayer.csproj": {
+    "/home/runner/work/Helper/Helper/DataAccessLayer/DataAccessLayer.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/pranavpatil/Desktop/Helper/DataAccessLayer/DataAccessLayer.csproj",
+        "projectUniqueName": "/home/runner/work/Helper/Helper/DataAccessLayer/DataAccessLayer.csproj",
         "projectName": "DataAccessLayer",
-        "projectPath": "/Users/pranavpatil/Desktop/Helper/DataAccessLayer/DataAccessLayer.csproj",
-        "packagesPath": "/Users/pranavpatil/.nuget/packages/",
-        "outputPath": "/Users/pranavpatil/Desktop/Helper/DataAccessLayer/obj/",
+        "projectPath": "/home/runner/work/Helper/Helper/DataAccessLayer/DataAccessLayer.csproj",
+        "packagesPath": "/home/runner/work/Helper/.codeql-scratch/dbs/csharp/working/packages",
+        "outputPath": "/home/runner/work/Helper/Helper/DataAccessLayer/obj/",
         "projectStyle": "PackageReference",
         "centralPackageVersionsManagementEnabled": true,
         "configFilePaths": [
-          "/Users/pranavpatil/.nuget/NuGet/NuGet.Config"
+          "/home/runner/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
         ],
         "sources": {
-          "/usr/local/share/dotnet/library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
           "net8.0": {
             "targetAlias": "net8.0",
             "projectReferences": {
-              "/Users/pranavpatil/Desktop/Helper/Shared/Shared.csproj": {
-                "projectPath": "/Users/pranavpatil/Desktop/Helper/Shared/Shared.csproj"
+              "/home/runner/work/Helper/Helper/Shared/Shared.csproj": {
+                "projectPath": "/home/runner/work/Helper/Helper/Shared/Shared.csproj"
               }
             }
           }
@@ -311,33 +319,42 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[8.0.22, 8.0.22]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[8.0.22, 8.0.22]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/8.0.416/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/8.0.416/PortableRuntimeIdentifierGraph.json"
         }
       }
     },
-    "/Users/pranavpatil/Desktop/Helper/Shared/Shared.csproj": {
+    "/home/runner/work/Helper/Helper/Shared/Shared.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/pranavpatil/Desktop/Helper/Shared/Shared.csproj",
+        "projectUniqueName": "/home/runner/work/Helper/Helper/Shared/Shared.csproj",
         "projectName": "Shared",
-        "projectPath": "/Users/pranavpatil/Desktop/Helper/Shared/Shared.csproj",
-        "packagesPath": "/Users/pranavpatil/.nuget/packages/",
-        "outputPath": "/Users/pranavpatil/Desktop/Helper/Shared/obj/",
+        "projectPath": "/home/runner/work/Helper/Helper/Shared/Shared.csproj",
+        "packagesPath": "/home/runner/work/Helper/.codeql-scratch/dbs/csharp/working/packages",
+        "outputPath": "/home/runner/work/Helper/Helper/Shared/obj/",
         "projectStyle": "PackageReference",
         "centralPackageVersionsManagementEnabled": true,
         "configFilePaths": [
-          "/Users/pranavpatil/.nuget/NuGet/NuGet.Config"
+          "/home/runner/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
         ],
         "sources": {
-          "/usr/local/share/dotnet/library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -425,12 +442,22 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.AspNetCore.App.Ref",
+              "version": "[8.0.22, 8.0.22]"
+            },
+            {
+              "name": "Microsoft.NETCore.App.Ref",
+              "version": "[8.0.22, 8.0.22]"
+            }
+          ],
           "frameworkReferences": {
             "Microsoft.NETCore.App": {
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/local/share/dotnet/sdk/8.0.416/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "/usr/share/dotnet/sdk/8.0.416/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

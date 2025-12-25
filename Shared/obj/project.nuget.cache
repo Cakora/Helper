@@ -1,11 +1,13 @@
 {
   "version": 2,
-  "dgSpecHash": "1wcVp0DFF7s=",
+  "dgSpecHash": "KJK7rFn0AlU=",
   "success": true,
-  "projectFilePath": "/Users/pranavpatil/Desktop/Helper/Shared/Shared.csproj",
+  "projectFilePath": "/home/runner/work/Helper/Helper/Shared/Shared.csproj",
   "expectedPackageFiles": [
-    "/Users/pranavpatil/.nuget/packages/microsoft.codeanalysis.netanalyzers/8.0.0/microsoft.codeanalysis.netanalyzers.8.0.0.nupkg.sha512",
-    "/Users/pranavpatil/.nuget/packages/sonaranalyzer.csharp/9.27.0.93347/sonaranalyzer.csharp.9.27.0.93347.nupkg.sha512"
+    "/home/runner/work/Helper/.codeql-scratch/dbs/csharp/working/packages/microsoft.codeanalysis.netanalyzers/8.0.0/microsoft.codeanalysis.netanalyzers.8.0.0.nupkg.sha512",
+    "/home/runner/work/Helper/.codeql-scratch/dbs/csharp/working/packages/sonaranalyzer.csharp/9.27.0.93347/sonaranalyzer.csharp.9.27.0.93347.nupkg.sha512",
+    "/home/runner/work/Helper/.codeql-scratch/dbs/csharp/working/packages/microsoft.netcore.app.ref/8.0.22/microsoft.netcore.app.ref.8.0.22.nupkg.sha512",
+    "/home/runner/work/Helper/.codeql-scratch/dbs/csharp/working/packages/microsoft.aspnetcore.app.ref/8.0.22/microsoft.aspnetcore.app.ref.8.0.22.nupkg.sha512"
   ],
   "logs": []
 }

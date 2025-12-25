@@ -333,12 +333,10 @@ public sealed class DatabaseHelper : IDatabaseHelper
             ApplyScopedTransaction(innerRequest, scope, command);
             var activity = StartActivity(nameof(StreamAsync), innerRequest);
             try
-            {
-                var behavior = innerRequest.CommandBehavior == CommandBehavior.Default
-                    ? CommandBehavior.SequentialAccess
-                    : innerRequest.CommandBehavior;
+                {
+                    var behavior = EnsureSequentialBehavior(innerRequest.CommandBehavior);
 
-                await using var reader = await ExecuteReaderWithFallbackAsync(innerRequest, command, behavior, innerToken).ConfigureAwait(false);
+                    await using var reader = await ExecuteReaderWithFallbackAsync(innerRequest, command, behavior, innerToken).ConfigureAwait(false);
                 while (await reader.ReadAsync(innerToken).ConfigureAwait(false))
                 {
                     yield return innerMapper(reader);
@@ -1498,11 +1496,22 @@ public sealed class DatabaseHelper : IDatabaseHelper
                 }
             });
 
+    /// <summary>
+    /// Ensures sequential access is enabled for streaming scenarios while preserving caller flags.
+    /// </summary>
     private static CommandBehavior EnsureSequentialBehavior(CommandBehavior behavior)
     {
-        return behavior == CommandBehavior.Default
-            ? CommandBehavior.SequentialAccess
-            : behavior | CommandBehavior.SequentialAccess;
+        if (behavior == CommandBehavior.Default)
+        {
+            return CommandBehavior.SequentialAccess;
+        }
+
+        if ((behavior & CommandBehavior.SequentialAccess) != 0)
+        {
+            return behavior;
+        }
+
+        return behavior | CommandBehavior.SequentialAccess;
     }
 
     private string GetCommandLabel(DbCommandRequest request) =>
