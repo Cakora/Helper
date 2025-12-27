@@ -43,7 +43,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
     private readonly IValidator<DbCommandRequest>[] _requestValidators;
     private readonly IRowMapperFactory _rowMapperFactory;
     private readonly IDataAccessTelemetry _telemetry;
-    private readonly DalFeatures _features;
+    private readonly DalRuntimeOptions _runtimeOptions;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DatabaseHelper"/> class.
@@ -60,7 +60,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         IResilienceStrategy resilience,
         ILogger<DatabaseHelper> logger,
         IDataAccessTelemetry telemetry,
-        DalFeatures features,
+        DalRuntimeOptions runtimeOptions,
         IEnumerable<IValidator<DbCommandRequest>> requestValidators,
         IRowMapperFactory rowMapperFactory)
     {
@@ -70,7 +70,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         _resilience = resilience ?? throw new ArgumentNullException(nameof(resilience));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _telemetry = telemetry ?? throw new ArgumentNullException(nameof(telemetry));
-        _features = features ?? throw new ArgumentNullException(nameof(features));
+        _runtimeOptions = runtimeOptions ?? throw new ArgumentNullException(nameof(runtimeOptions));
         _requestValidators = requestValidators?.ToArray() ?? Array.Empty<IValidator<DbCommandRequest>>();
         _rowMapperFactory = rowMapperFactory ?? throw new ArgumentNullException(nameof(rowMapperFactory));
     }
@@ -80,6 +80,8 @@ public sealed class DatabaseHelper : IDatabaseHelper
 
     private void RecordActivityResult(Activity? activity, DbExecutionResult execution) =>
         _telemetry.RecordCommandResult(activity, execution);
+
+    #region Public Operations
 
     /// <summary>
     /// Executes a non-query command asynchronously and returns rows affected plus output parameters.
@@ -329,22 +331,35 @@ public sealed class DatabaseHelper : IDatabaseHelper
             [EnumeratorCancellation] CancellationToken innerToken)
         {
             await using var scope = await LeaseScopeAsync(innerRequest, innerToken).ConfigureAwait(false);
-            var command = await _commandFactory.RentAsync(scope.Connection, innerRequest, innerToken).ConfigureAwait(false);
+            var command = await _commandFactory.GetCommandAsync(scope.Connection, innerRequest, innerToken).ConfigureAwait(false);
             ApplyScopedTransaction(innerRequest, scope, command);
             var activity = StartActivity(nameof(StreamAsync), innerRequest);
             try
-                {
-                    var behavior = EnsureSequentialBehavior(innerRequest.CommandBehavior);
+            {
+                var behavior = EnsureSequentialBehavior(innerRequest.CommandBehavior);
 
-                    await using var reader = await ExecuteReaderWithFallbackAsync(innerRequest, command, behavior, innerToken).ConfigureAwait(false);
-                while (await reader.ReadAsync(innerToken).ConfigureAwait(false))
+                await using var reader = await ExecuteWithCommandPolicyAsync(
+                    token => ExecuteReaderWithFallbackAsync(innerRequest, command, behavior, token).AsTask(),
+                    innerToken).ConfigureAwait(false);
+                var yielded = 0;
+                try
                 {
-                    yield return innerMapper(reader);
+                    while (await reader.ReadAsync(innerToken).ConfigureAwait(false))
+                    {
+                        yielded++;
+                        yield return innerMapper(reader);
+                    }
+                }
+                finally
+                {
+                    var execution = new DbExecutionResult(reader.RecordsAffected, null, EmptyOutputs);
+                    _telemetry.RecordCommandResult(activity, execution, yielded);
+                    activity?.SetStatus(ActivityStatusCode.Ok);
                 }
             }
             finally
             {
-                _commandFactory.Return(command);
+                _commandFactory.ReturnCommand(command);
                 activity?.Dispose();
             }
         }
@@ -495,7 +510,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         try
         {
             var scope = await LeaseScopeAsync(request, cancellationToken).ConfigureAwait(false);
-            var command = await _commandFactory.RentAsync(scope.Connection, request, cancellationToken).ConfigureAwait(false);
+            var command = await _commandFactory.GetCommandAsync(scope.Connection, request, cancellationToken).ConfigureAwait(false);
             ApplyScopedTransaction(request, scope, command);
             var behavior = request.CommandBehavior == CommandBehavior.Default
                 ? CommandBehavior.Default
@@ -529,7 +544,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
             () =>
             {
                 var scope = LeaseScope(request);
-                var command = _commandFactory.Rent(scope.Connection, request);
+                var command = _commandFactory.GetCommand(scope.Connection, request);
                 ApplyScopedTransaction(request, scope, command);
                 var behavior = request.CommandBehavior == CommandBehavior.Default
                     ? CommandBehavior.Default
@@ -834,6 +849,10 @@ public sealed class DatabaseHelper : IDatabaseHelper
         }
     }
 
+    #endregion
+
+    #region Internal Helpers
+
     private async Task<DbExecutionResult> ExecuteScalarLikeAsync(
         DbCommandRequest request,
         Func<DbCommand, CancellationToken, Task<CommandResult<object?>>> executor,
@@ -860,7 +879,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         ValidateRequest(request);
 
         await using var scope = await LeaseScopeAsync(request, cancellationToken).ConfigureAwait(false);
-        var command = await _commandFactory.RentAsync(scope.Connection, request, cancellationToken).ConfigureAwait(false);
+        var command = await _commandFactory.GetCommandAsync(scope.Connection, request, cancellationToken).ConfigureAwait(false);
         ApplyScopedTransaction(request, scope, command);
         using var logScope = BeginLoggingScope(request);
         var stopwatch = Stopwatch.StartNew();
@@ -881,7 +900,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         }
         finally
         {
-            _commandFactory.Return(command);
+            _commandFactory.ReturnCommand(command);
         }
     }
 
@@ -893,7 +912,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         ValidateRequest(request);
 
         using var scope = LeaseScope(request);
-        var command = _commandFactory.Rent(scope.Connection, request);
+        var command = _commandFactory.GetCommand(scope.Connection, request);
         ApplyScopedTransaction(request, scope, command);
         using var logScope = BeginLoggingScope(request);
         var stopwatch = Stopwatch.StartNew();
@@ -914,7 +933,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         }
         finally
         {
-            _commandFactory.Return(command);
+            _commandFactory.ReturnCommand(command);
         }
     }
 
@@ -1043,6 +1062,11 @@ public sealed class DatabaseHelper : IDatabaseHelper
         if (string.IsNullOrWhiteSpace(request.CommandText))
         {
             throw new ArgumentException("Command text must be provided.", nameof(request));
+        }
+
+        if (request.SkipValidation)
+        {
+            return;
         }
 
         foreach (var validator in _requestValidators)
@@ -1292,7 +1316,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         CancellationToken cancellationToken)
     {
         var scope = await LeaseScopeAsync(request, cancellationToken).ConfigureAwait(false);
-        var command = await _commandFactory.RentAsync(scope.Connection, request, cancellationToken).ConfigureAwait(false);
+        var command = await _commandFactory.GetCommandAsync(scope.Connection, request, cancellationToken).ConfigureAwait(false);
         ApplyScopedTransaction(request, scope, command);
         try
         {
@@ -1302,7 +1326,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         }
         catch
         {
-            _commandFactory.Return(command);
+            _commandFactory.ReturnCommand(command);
             await scope.DisposeAsync().ConfigureAwait(false);
             throw;
         }
@@ -1313,7 +1337,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         string cursorParameterName)
     {
         var scope = LeaseScope(request);
-        var command = _commandFactory.Rent(scope.Connection, request);
+        var command = _commandFactory.GetCommand(scope.Connection, request);
         ApplyScopedTransaction(request, scope, command);
         try
         {
@@ -1323,7 +1347,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         }
         catch
         {
-            _commandFactory.Return(command);
+            _commandFactory.ReturnCommand(command);
             scope.Dispose();
             throw;
         }
@@ -1375,24 +1399,9 @@ public sealed class DatabaseHelper : IDatabaseHelper
                 }
 
                 await using var source = reader.GetStream(ordinal);
-                var buffer = ArrayPool<byte>.Shared.Rent(81920);
-                try
-                {
-                    long total = 0;
-                    int read;
-                    while ((read = await source.ReadAsync(buffer, 0, buffer.Length, token).ConfigureAwait(false)) > 0)
-                    {
-                        await destination.WriteAsync(buffer.AsMemory(0, read), token).ConfigureAwait(false);
-                        total += read;
-                    }
-
-                    LogInformation("Streamed {Bytes} bytes from {Command}.", total, GetCommandLabel(request));
-                    return total;
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(buffer);
-                }
+                var total = await CopyStreamAsync(source, destination, token).ConfigureAwait(false);
+                LogInformation("Streamed {Bytes} bytes from {Command}.", total, GetCommandLabel(request));
+                return total;
             },
             cancellationToken);
 
@@ -1409,24 +1418,9 @@ public sealed class DatabaseHelper : IDatabaseHelper
                 }
 
                 using var source = reader.GetStream(ordinal);
-                var buffer = ArrayPool<byte>.Shared.Rent(81920);
-                try
-                {
-                    long total = 0;
-                    int read;
-                    while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
-                    {
-                        destination.Write(buffer, 0, read);
-                        total += read;
-                    }
-
-                    LogInformation("Streamed {Bytes} bytes from {Command}.", total, GetCommandLabel(request));
-                    return total;
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(buffer);
-                }
+                var total = CopyStream(source, destination);
+                LogInformation("Streamed {Bytes} bytes from {Command}.", total, GetCommandLabel(request));
+                return total;
             });
 
     private Task<long> StreamTextInternalAsync(DbCommandRequest request, int ordinal, TextWriter writer, CancellationToken cancellationToken) =>
@@ -1442,24 +1436,9 @@ public sealed class DatabaseHelper : IDatabaseHelper
                 }
 
                 using var textReader = reader.GetTextReader(ordinal);
-                var buffer = ArrayPool<char>.Shared.Rent(4096);
-                try
-                {
-                    long total = 0;
-                    int read;
-                    while ((read = await textReader.ReadAsync(buffer.AsMemory(0, buffer.Length)).ConfigureAwait(false)) > 0)
-                    {
-                        await writer.WriteAsync(buffer.AsMemory(0, read), token).ConfigureAwait(false);
-                        total += read;
-                    }
-
-                    LogInformation("Streamed {Chars} chars from {Command}.", total, GetCommandLabel(request));
-                    return total;
-                }
-                finally
-                {
-                    ArrayPool<char>.Shared.Return(buffer);
-                }
+                var total = await CopyTextAsync(textReader, writer, token).ConfigureAwait(false);
+                LogInformation("Streamed {Chars} chars from {Command}.", total, GetCommandLabel(request));
+                return total;
             },
             cancellationToken);
 
@@ -1476,25 +1455,94 @@ public sealed class DatabaseHelper : IDatabaseHelper
                 }
 
                 using var textReader = reader.GetTextReader(ordinal);
-                var buffer = ArrayPool<char>.Shared.Rent(4096);
-                try
-                {
-                    long total = 0;
-                    int read;
-                    while ((read = textReader.Read(buffer, 0, buffer.Length)) > 0)
-                    {
-                        writer.Write(buffer, 0, read);
-                        total += read;
-                    }
-
-                    LogInformation("Streamed {Chars} chars from {Command}.", total, GetCommandLabel(request));
-                    return total;
-                }
-                finally
-                {
-                    ArrayPool<char>.Shared.Return(buffer);
-                }
+                var total = CopyText(textReader, writer);
+                LogInformation("Streamed {Chars} chars from {Command}.", total, GetCommandLabel(request));
+                return total;
             });
+
+    private static async Task<long> CopyStreamAsync(Stream source, Stream destination, CancellationToken cancellationToken)
+    {
+        var buffer = ArrayPool<byte>.Shared.Rent(81920);
+        try
+        {
+            long total = 0;
+            int read;
+            while ((read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
+            {
+                await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                total += read;
+            }
+
+            return total;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static long CopyStream(Stream source, Stream destination)
+    {
+        var buffer = ArrayPool<byte>.Shared.Rent(81920);
+        try
+        {
+            long total = 0;
+            int read;
+            while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                destination.Write(buffer, 0, read);
+                total += read;
+            }
+
+            return total;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    private static async Task<long> CopyTextAsync(TextReader source, TextWriter destination, CancellationToken cancellationToken)
+    {
+        var buffer = ArrayPool<char>.Shared.Rent(4096);
+        try
+        {
+            long total = 0;
+            int read;
+            while ((read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length)).ConfigureAwait(false)) > 0)
+            {
+                await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                total += read;
+            }
+
+            return total;
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(buffer);
+        }
+    }
+
+    private static long CopyText(TextReader source, TextWriter destination)
+    {
+        var buffer = ArrayPool<char>.Shared.Rent(4096);
+        try
+        {
+            long total = 0;
+            int read;
+            while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                destination.Write(buffer, 0, read);
+                total += read;
+            }
+
+            return total;
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(buffer);
+        }
+    }
 
     /// <summary>
     /// Ensures sequential access is enabled for streaming scenarios while preserving caller flags.
@@ -1517,7 +1565,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
     private string GetCommandLabel(DbCommandRequest request) =>
         _telemetry.GetCommandDisplayName(request);
 
-    private bool ShouldLogDetails => _features.DetailedLogging && _logger.IsEnabled(LogLevel.Information);
+    private bool ShouldLogDetails => _runtimeOptions.EnableDetailedLogging && _logger.IsEnabled(LogLevel.Information);
 
     private void LogInformation(string message, params object?[] args)
     {
@@ -1574,5 +1622,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         {
             command.Transaction = transaction;
         }
+    #endregion
+
     }
 }
