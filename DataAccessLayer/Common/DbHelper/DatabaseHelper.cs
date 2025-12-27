@@ -1,5 +1,4 @@
 using System;
-using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Data;
@@ -23,6 +22,7 @@ using DataAccessLayer.Mapping;
 using DataAccessLayer.Telemetry;
 using DataAccessLayer.Exceptions;
 using DataException = DataAccessLayer.Exceptions.DataException;
+using Shared.IO;
 
 namespace DataAccessLayer.Common.DbHelper;
 
@@ -336,7 +336,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
             var activity = StartActivity(nameof(StreamAsync), innerRequest);
             try
             {
-                var behavior = EnsureSequentialBehavior(innerRequest.CommandBehavior);
+                var behavior = DbStreamUtilities.EnsureSequentialBehavior(innerRequest.CommandBehavior);
 
                 await using var reader = await ExecuteWithCommandPolicyAsync(
                     token => ExecuteReaderWithFallbackAsync(innerRequest, command, behavior, token).AsTask(),
@@ -1391,7 +1391,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
             request,
             async (command, token) =>
             {
-                var behavior = EnsureSequentialBehavior(request.CommandBehavior);
+                var behavior = DbStreamUtilities.EnsureSequentialBehavior(request.CommandBehavior);
                 await using var reader = await ExecuteReaderWithFallbackAsync(request, command, behavior, token).ConfigureAwait(false);
                 if (!await reader.ReadAsync(token).ConfigureAwait(false))
                 {
@@ -1399,7 +1399,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
                 }
 
                 await using var source = reader.GetStream(ordinal);
-                var total = await CopyStreamAsync(source, destination, token).ConfigureAwait(false);
+                var total = await DbStreamUtilities.CopyStreamAsync(source, destination, token).ConfigureAwait(false);
                 LogInformation("Streamed {Bytes} bytes from {Command}.", total, GetCommandLabel(request));
                 return total;
             },
@@ -1410,7 +1410,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
             request,
             command =>
             {
-                var behavior = EnsureSequentialBehavior(request.CommandBehavior);
+                var behavior = DbStreamUtilities.EnsureSequentialBehavior(request.CommandBehavior);
                 using var reader = command.ExecuteReader(behavior);
                 if (!reader.Read())
                 {
@@ -1418,7 +1418,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
                 }
 
                 using var source = reader.GetStream(ordinal);
-                var total = CopyStream(source, destination);
+                var total = DbStreamUtilities.CopyStream(source, destination);
                 LogInformation("Streamed {Bytes} bytes from {Command}.", total, GetCommandLabel(request));
                 return total;
             });
@@ -1428,7 +1428,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
             request,
             async (command, token) =>
             {
-                var behavior = EnsureSequentialBehavior(request.CommandBehavior);
+                var behavior = DbStreamUtilities.EnsureSequentialBehavior(request.CommandBehavior);
                 await using var reader = await ExecuteReaderWithFallbackAsync(request, command, behavior, token).ConfigureAwait(false);
                 if (!await reader.ReadAsync(token).ConfigureAwait(false))
                 {
@@ -1436,7 +1436,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
                 }
 
                 using var textReader = reader.GetTextReader(ordinal);
-                var total = await CopyTextAsync(textReader, writer, token).ConfigureAwait(false);
+                var total = await DbStreamUtilities.CopyTextAsync(textReader, writer, token).ConfigureAwait(false);
                 LogInformation("Streamed {Chars} chars from {Command}.", total, GetCommandLabel(request));
                 return total;
             },
@@ -1447,7 +1447,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
             request,
             command =>
             {
-                var behavior = EnsureSequentialBehavior(request.CommandBehavior);
+                var behavior = DbStreamUtilities.EnsureSequentialBehavior(request.CommandBehavior);
                 using var reader = command.ExecuteReader(behavior);
                 if (!reader.Read())
                 {
@@ -1455,112 +1455,10 @@ public sealed class DatabaseHelper : IDatabaseHelper
                 }
 
                 using var textReader = reader.GetTextReader(ordinal);
-                var total = CopyText(textReader, writer);
+                var total = DbStreamUtilities.CopyText(textReader, writer);
                 LogInformation("Streamed {Chars} chars from {Command}.", total, GetCommandLabel(request));
                 return total;
             });
-
-    private static async Task<long> CopyStreamAsync(Stream source, Stream destination, CancellationToken cancellationToken)
-    {
-        var buffer = ArrayPool<byte>.Shared.Rent(81920);
-        try
-        {
-            long total = 0;
-            int read;
-            while ((read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
-            {
-                await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-                total += read;
-            }
-
-            return total;
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
-    }
-
-    private static long CopyStream(Stream source, Stream destination)
-    {
-        var buffer = ArrayPool<byte>.Shared.Rent(81920);
-        try
-        {
-            long total = 0;
-            int read;
-            while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                destination.Write(buffer, 0, read);
-                total += read;
-            }
-
-            return total;
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
-    }
-
-    private static async Task<long> CopyTextAsync(TextReader source, TextWriter destination, CancellationToken cancellationToken)
-    {
-        var buffer = ArrayPool<char>.Shared.Rent(4096);
-        try
-        {
-            long total = 0;
-            int read;
-            while ((read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length)).ConfigureAwait(false)) > 0)
-            {
-                await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-                total += read;
-            }
-
-            return total;
-        }
-        finally
-        {
-            ArrayPool<char>.Shared.Return(buffer);
-        }
-    }
-
-    private static long CopyText(TextReader source, TextWriter destination)
-    {
-        var buffer = ArrayPool<char>.Shared.Rent(4096);
-        try
-        {
-            long total = 0;
-            int read;
-            while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                destination.Write(buffer, 0, read);
-                total += read;
-            }
-
-            return total;
-        }
-        finally
-        {
-            ArrayPool<char>.Shared.Return(buffer);
-        }
-    }
-
-    /// <summary>
-    /// Ensures sequential access is enabled for streaming scenarios while preserving caller flags.
-    /// </summary>
-    private static CommandBehavior EnsureSequentialBehavior(CommandBehavior behavior)
-    {
-        if (behavior == CommandBehavior.Default)
-        {
-            return CommandBehavior.SequentialAccess;
-        }
-
-        if ((behavior & CommandBehavior.SequentialAccess) != 0)
-        {
-            return behavior;
-        }
-
-        return behavior | CommandBehavior.SequentialAccess;
-    }
 
     private string GetCommandLabel(DbCommandRequest request) =>
         _telemetry.GetCommandDisplayName(request);
@@ -1622,7 +1520,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         {
             command.Transaction = transaction;
         }
-    #endregion
-
     }
+
+    #endregion
 }
