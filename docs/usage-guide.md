@@ -74,22 +74,50 @@ Need certain rules to run everywhere by default? Extend the JSON:
 
 Now every `IValidationService.Validate/ValidateAndThrow` call automatically runs the `Strict` rule set unless the caller explicitly supplies a different list.
 
+### Provider-specific business workflows
+
+Prefer to keep the provider-to-workflow mapping obvious instead of relying on convention? Wire the workflow explicitly right after `AddCoreBusiness`:
+
+```csharp
+builder.Services
+    .AddCoreBusiness()
+    .AddMigrationWorkflow(databaseOptions);           // reads DatabaseOptions.Provider internally
+
+// Or branch manually without DatabaseOptions:
+builder.Services.AddMigrationWorkflow(DatabaseProvider.SqlServer);
+```
+
+`AddMigrationWorkflow` exposes a `ServiceLifetime` parameter (defaults to scoped) so you can choose whether the workflow is scoped, singleton, or transient. Each call resolves to one of the built-in workflow classes (`SqlServerMigrationWorkflow`, `PostgresMigrationWorkflow`, `OracleMigrationWorkflow`). If you need a custom workflow, register your own implementation before calling the helper or replace the helper with a direct `services.AddScoped<IMigrationWorkflow, CustomWorkflow>()` line. The key is that the registration now lives in one obvious extension method instead of being buried in unrelated DI code.
+
 ### Choose Your DAL Surface
 
 - **ADO-only:** call `builder.Services.AddDataAccessLayer(databaseOptions);`. Stop there if you only need `IDatabaseHelper`, transactions, telemetry, bulk, etc.
 - **EF-only:** call `AddDataAccessLayer` (to reuse the shared infrastructure) and then `AddEcmEntityFrameworkSupport(databaseOptions);`. Skip the helper call entirely if you never want the EF surface.
-- **Hybrid (default):** call both methods. The helper registers everything (validation, telemetry, bulk, resilience, transactions) and the EF call layers DbContexts/repositories/bulk extensions on top.
+- **Hybrid (default):** call both methods. The helper registers validation/transactions/bulk infrastructure immediately, and you can opt into telemetry, resilience, or detailed logging per host when needed.
 
-All optional subsystems default to “on”. To trim something globally (for example, disable telemetry everywhere), edit `DataAccessLayer/Common/DbHelper/Configuration/DalFeatureDefaults.cs` and tweak the `CreateDefaultFeatures` method. That keeps the host call-site simple—no extra parameters or feature manifests to pass around.
+See `docs/dal-usage-modes.md` for a deeper walk-through of both ADO-only and EF-with-ADO connection sharing scenarios.
+
+Optional services (telemetry, resilience retries, verbose logging) are controlled via the optional `configureServices` delegate on `AddDataAccessLayer`. All three default to `false`, so flip them only in hosts that truly need the extra behavior. Example:
+
+```csharp
+services.AddDataAccessLayer(
+    databaseOptions,
+    configureServices: dal =>
+    {
+        dal.EnableTelemetry = true;
+        dal.EnableDetailedLogging = environment.IsDevelopment();
+    });
+```
+
+Validation still runs on every command unless a request explicitly opts out. When a harness needs to bypass validators (for example while replaying intentionally malformed payloads), set `DbCommandRequest.SkipValidation = true` on that single request. The rest of the application continues to benefit from validation.
 
 ### Source + Destination (`MigrationRunnerOptions`)
 ```json
 {
   "MigrationRunner": {
-    "Source": { "Provider": "SqlServer", "ConnectionString": "..." },
-    "Destination": { "Provider": "PostgreSql", "ConnectionString": "..." },
-    "Bulk": { "BatchSize": 2000 },
-    "Logging": { "LogPath": null }
+    "Source": { "Provider": "SqlServer", "SqlServer": { "Server": "localhost", "Database": "HelperSource" } },
+    "Destination": { "Provider": "PostgreSql", "Postgres": { "Host": "localhost", "Database": "HelperDest", "Username": "postgres", "Password": "postgres" } },
+    "Bulk": { "BatchSize": 2000 }
   }
 }
 ```
@@ -101,12 +129,10 @@ var runnerOptions = builder.Configuration
     ?? throw new DalConfigurationException("Missing MigrationRunner configuration.");
 
 builder.Services
-    .AddMigrationEndpoints(
-        EndpointRegistration.FromOptions(runnerOptions.Source!),
-        EndpointRegistration.FromOptions(runnerOptions.Destination!));
+    .AddMigrationRunnerServices(runnerOptions);
 ```
 
-`AddMigrationEndpoints` converts each endpoint into `DatabaseOptions`, registers the DAL/EF/Core services, and exposes `EndpointRuntimeOptions` (`IOptionsMonitor<EndpointRuntimeOptions>`) so the rest of the app can read connection strings and provider metadata per role. Need an ADO-only destination? Build your own `EndpointRegistration` with `IncludeEntityFramework = false` and pass it to `AddMigrationEndpoints`.
+`AddMigrationRunnerServices` converts the source/destination JSON into `EndpointRegistration` objects, registers the DAL + EF + CoreBusiness stacks for each provider, and exposes `EndpointRuntimeOptions` (`IOptionsMonitor<EndpointRuntimeOptions>`) so the rest of the app can read connection strings and provider metadata per role. Need to tweak a single endpoint (for example disable EF or customize validation)? Build two `EndpointRegistration` instances manually (optionally passing `configureValidation`) and call the overload that accepts registrations. Configure logging separately via `builder.Logging` or your logging provider of choice.
 
 ---
 
@@ -261,7 +287,7 @@ var orders = resultSets.MapRows<OrderDto>(
 The `MigrationRunner` project includes a concrete example that reads users from one provider and upserts them into another without duplicating DAL code:
 
 1. **Shared contract:** `Shared/Entities/UserProfile.cs` defines the fields for both databases. `DataAccessLayer.Database.ECM.Models.Configurations.UserProfileConfiguration` maps it to the `Users` table, so SQL Server, PostgreSQL, and Oracle reuse the same schema.
-2. **Provider-specific wiring:** `Program.cs` builds two `EndpointRegistration` objects (source/destination) and calls `builder.Services.AddMigrationEndpoints(...)`. It then registers two `EndpointUserDataGateway` instances—one bound to `ISourceDbContextFactory`, the other to `IDestinationDbContextFactory`. Each gateway therefore uses the appropriate provider/connection string.
+2. **Provider-specific wiring:** `Program.cs` builds two `EndpointRegistration` objects (source/destination) and calls `builder.Services.AddMigrationRunnerServices(...)`. The helper wires both DAL stacks, their EF support, and exposes `ISourceDbContextFactory` / `IDestinationDbContextFactory`. Each gateway therefore uses the appropriate provider/connection string with no manual branching.
 3. **Business logic once:** `MigrationRunner/Infrastructure/UserSynchronizationService.cs` calls `ISourceUserDataGateway.GetUsersAsync`, copies the result, and invokes `IDestinationUserDataGateway.UpsertAsync`. Because the gateways abstract the provider, the service only cares about transformation logic (trim strings, set `IsActive`, etc.).
 4. **Hosted workflow:** `MigrationHostedService` resolves `IUserSynchronizationService` after running migrations. A single `dotnet run` migrates both schemas and synchronizes user rows.
 
@@ -319,6 +345,48 @@ var customerTable = lease.Reader.ToDataTable("CustomersSnapshot");
 ```
 
 Each helper consumes the remaining rows in the active result set, so request a new reader (or use `LoadDataTable*`/`Query*`) if you need multiple shapes.
+
+---
+
+### Command pooling lifecycle
+
+Most apps never interact with `IDbCommandFactory` directly, but it is helpful to understand how the DAL names the lifecycle hooks now that we replaced the old “rent/lease” verbs:
+
+- `GetCommand(DbConnection, DbCommandRequest)` and `GetCommandAsync(...)` return a pooled `DbCommand` that has already been configured (connection, transaction, command text, type, timeout, and parameters). The async overload only awaits `PrepareAsync`, so the cancellation token is forwarded to the underlying provider if you opt into prepared statements.
+- `ReturnCommand(DbCommand)` must be called once the command is finished executing. The helper and `DbReaderScope` do this for you automatically; call it yourself only when you bypass the helper and orchestrate commands manually.
+- When command pooling is enabled, returning a command clears parameters and places it back into the pool so the next caller can reuse both the command and its parameter objects. When pooling is disabled the factory disposes the command after calling `ReturnCommand`.
+
+If you need to hook into the pool directly (for custom diagnostics, profiling, etc.) the pattern is:
+
+```csharp
+var command = commandFactory.GetCommand(connection, request);
+try
+{
+    await command.ExecuteNonQueryAsync(cancellationToken);
+}
+finally
+{
+    commandFactory.ReturnCommand(command);
+}
+```
+
+Following this pattern keeps the pool healthy and avoids the “where was this command registered?” confusion noted in previous iterations.
+
+---
+
+### Switching providers at runtime
+
+When a host needs to talk to different providers (SQL Server locally, Oracle in the cloud, etc.) you no longer have to rewire Startup. Bind the `ActiveDataSource` section once, and pass that object to whichever helper you need:
+
+```csharp
+var active = configuration.GetSection("ActiveDataSource").Get<ActiveDataSourceOptions>()
+    ?? throw new InvalidOperationException();
+
+services.AddDataAccessLayer(active);             // ADO pipeline
+services.AddEcmEntityFrameworkSupport(active);   // Optional EF helpers sharing the same provider
+```
+
+`ActiveDataSourceOptions` accepts either a raw connection string or the provider-specific profile (`SqlServer`, `Postgres`, or `Oracle`). The DAL builds the correct `DatabaseOptions` on the fly, so “active provider” can be flipped per environment without touching the calling code. This works equally well for ADO-only workloads and EF-assisted scenarios.
 
 ---
 

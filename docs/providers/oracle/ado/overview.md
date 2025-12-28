@@ -103,7 +103,7 @@ while (await lease.Reader.ReadAsync(cancellationToken))
     // map rows directly from the REF CURSOR
 }
 ```
-`ExecuteRefCursor`/`ExecuteRefCursorAsync` run the procedure, capture the REF CURSOR output, and return a `DbReaderLease` so you can stream rows without casting to `OracleRefCursor` yourself.
+`ExecuteRefCursor`/`ExecuteRefCursorAsync` run the procedure, capture the REF CURSOR output, and return a `DbReaderScope` so you can stream rows without casting to `OracleRefCursor` yourself.
 
 ## Conventions
 - Oracle normalizes identifiers to uppercase unless quoted; when mapping by name, call `reader.GetOrdinal("COLUMN_NAME")` or normalize property names to uppercase.

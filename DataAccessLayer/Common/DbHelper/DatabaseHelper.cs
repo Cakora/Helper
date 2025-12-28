@@ -330,7 +330,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
             Func<DbDataReader, T> innerMapper,
             [EnumeratorCancellation] CancellationToken innerToken)
         {
-            await using var scope = await LeaseScopeAsync(innerRequest, innerToken).ConfigureAwait(false);
+            await using var scope = await AcquireConnectionScopeAsync(innerRequest, innerToken).ConfigureAwait(false);
             var command = await _commandFactory.GetCommandAsync(scope.Connection, innerRequest, innerToken).ConfigureAwait(false);
             ApplyScopedTransaction(innerRequest, scope, command);
             var activity = StartActivity(nameof(StreamAsync), innerRequest);
@@ -501,22 +501,22 @@ public sealed class DatabaseHelper : IDatabaseHelper
     /// </summary>
     /// <param name="request">Command request describing text, parameters, and transaction context.</param>
     /// <param name="cancellationToken">Propagation token for the async operation.</param>
-    /// <returns>A <see cref="DbReaderLease"/> wrapping the reader/command/connection.</returns>
-    public async Task<DbReaderLease> ExecuteReaderAsync(
+    /// <returns>A <see cref="DbReaderScope"/> wrapping the reader/command/connection.</returns>
+    public async Task<DbReaderScope> ExecuteReaderAsync(
             DbCommandRequest request,
             CancellationToken cancellationToken = default)
     {
         ValidateRequest(request);
         try
         {
-            var scope = await LeaseScopeAsync(request, cancellationToken).ConfigureAwait(false);
+            var scope = await AcquireConnectionScopeAsync(request, cancellationToken).ConfigureAwait(false);
             var command = await _commandFactory.GetCommandAsync(scope.Connection, request, cancellationToken).ConfigureAwait(false);
             ApplyScopedTransaction(request, scope, command);
             var behavior = request.CommandBehavior == CommandBehavior.Default
                 ? CommandBehavior.Default
                 : request.CommandBehavior;
             var reader = await ExecuteReaderWithFallbackAsync(request, command, behavior, cancellationToken).ConfigureAwait(false);
-            return new DbReaderLease(reader, command, scope, _commandFactory);
+            return new DbReaderScope(reader, command, scope, _commandFactory);
         }
         catch (Exception ex)
         {
@@ -528,29 +528,29 @@ public sealed class DatabaseHelper : IDatabaseHelper
     /// Executes a reader synchronously and returns a lease that controls disposal.
     /// </summary>
     /// <param name="request">Command request describing text, parameters, and transaction context.</param>
-    /// <returns>A <see cref="DbReaderLease"/> wrapping the reader/command/connection.</returns>
+    /// <returns>A <see cref="DbReaderScope"/> wrapping the reader/command/connection.</returns>
     /// <summary>
     /// Executes a reader synchronously and returns a lease that tracks command and connection ownership.
     /// </summary>
     /// <param name="request">Command request describing text, parameters, and transaction context.</param>
     /// <remarks>
-    /// Callers are responsible for disposing the returned <see cref="DbReaderLease"/> to ensure the command,
+    /// Callers are responsible for disposing the returned <see cref="DbReaderScope"/> to ensure the command,
     /// reader, and scoped connection are returned to their respective pools.
     /// </remarks>
-    public DbReaderLease ExecuteReader(DbCommandRequest request) =>
+    public DbReaderScope ExecuteReader(DbCommandRequest request) =>
         ExecuteWithRequestActivity(
             nameof(ExecuteReader),
             request,
             () =>
             {
-                var scope = LeaseScope(request);
+                var scope = AcquireConnectionScope(request);
                 var command = _commandFactory.GetCommand(scope.Connection, request);
                 ApplyScopedTransaction(request, scope, command);
                 var behavior = request.CommandBehavior == CommandBehavior.Default
                     ? CommandBehavior.Default
                     : request.CommandBehavior;
                 var reader = command.ExecuteReader(behavior);
-                return new DbReaderLease(reader, command, scope, _commandFactory);
+                return new DbReaderScope(reader, command, scope, _commandFactory);
             });
 
     /// <summary>
@@ -763,8 +763,8 @@ public sealed class DatabaseHelper : IDatabaseHelper
     /// <param name="procedureName">Name of the stored procedure.</param>
     /// <param name="parameters">Optional parameters collection.</param>
     /// <param name="cancellationToken">Propagation token for the async operation.</param>
-    /// <returns>A <see cref="DbReaderLease"/> wrapping the reader.</returns>
-    public async Task<DbReaderLease> ExecuteStoredProcedureReaderAsync(
+    /// <returns>A <see cref="DbReaderScope"/> wrapping the reader.</returns>
+    public async Task<DbReaderScope> ExecuteStoredProcedureReaderAsync(
         string procedureName,
         IReadOnlyList<DbParameterDefinition>? parameters = null,
         CancellationToken cancellationToken = default)
@@ -785,8 +785,8 @@ public sealed class DatabaseHelper : IDatabaseHelper
     /// </summary>
     /// <param name="procedureName">Name of the stored procedure.</param>
     /// <param name="parameters">Optional parameters collection.</param>
-    /// <returns>A <see cref="DbReaderLease"/> wrapping the reader.</returns>
-    public DbReaderLease ExecuteStoredProcedureReader(
+    /// <returns>A <see cref="DbReaderScope"/> wrapping the reader.</returns>
+    public DbReaderScope ExecuteStoredProcedureReader(
         string procedureName,
         IReadOnlyList<DbParameterDefinition>? parameters = null)
     {
@@ -807,8 +807,8 @@ public sealed class DatabaseHelper : IDatabaseHelper
     /// <param name="request">Command request describing the stored procedure.</param>
     /// <param name="cursorParameterName">Name of the REF CURSOR parameter (without provider prefix).</param>
     /// <param name="cancellationToken">Propagation token for the async operation.</param>
-    /// <returns>A <see cref="DbReaderLease"/> that streams rows from the cursor.</returns>
-    public async Task<DbReaderLease> ExecuteRefCursorAsync(
+    /// <returns>A <see cref="DbReaderScope"/> that streams rows from the cursor.</returns>
+    public async Task<DbReaderScope> ExecuteRefCursorAsync(
         DbCommandRequest request,
         string cursorParameterName,
         CancellationToken cancellationToken = default)
@@ -831,8 +831,8 @@ public sealed class DatabaseHelper : IDatabaseHelper
     /// </summary>
     /// <param name="request">Command request describing the stored procedure.</param>
     /// <param name="cursorParameterName">Name of the REF CURSOR parameter (without provider prefix).</param>
-    /// <returns>A <see cref="DbReaderLease"/> that streams rows from the cursor.</returns>
-    public DbReaderLease ExecuteRefCursor(
+    /// <returns>A <see cref="DbReaderScope"/> that streams rows from the cursor.</returns>
+    public DbReaderScope ExecuteRefCursor(
         DbCommandRequest request,
         string cursorParameterName)
     {
@@ -878,7 +878,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
     {
         ValidateRequest(request);
 
-        await using var scope = await LeaseScopeAsync(request, cancellationToken).ConfigureAwait(false);
+        await using var scope = await AcquireConnectionScopeAsync(request, cancellationToken).ConfigureAwait(false);
         var command = await _commandFactory.GetCommandAsync(scope.Connection, request, cancellationToken).ConfigureAwait(false);
         ApplyScopedTransaction(request, scope, command);
         using var logScope = BeginLoggingScope(request);
@@ -911,7 +911,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
     {
         ValidateRequest(request);
 
-        using var scope = LeaseScope(request);
+        using var scope = AcquireConnectionScope(request);
         var command = _commandFactory.GetCommand(scope.Connection, request);
         ApplyScopedTransaction(request, scope, command);
         using var logScope = BeginLoggingScope(request);
@@ -1310,19 +1310,19 @@ public sealed class DatabaseHelper : IDatabaseHelper
 
     // Oracle returns REF CURSORs via output parameters. We execute the procedure once, grab
     // the cursor parameter, and hand the underlying reader back to the caller inside a lease.
-    private async Task<DbReaderLease> ExecuteRefCursorCoreAsync(
+    private async Task<DbReaderScope> ExecuteRefCursorCoreAsync(
         DbCommandRequest request,
         string cursorParameterName,
         CancellationToken cancellationToken)
     {
-        var scope = await LeaseScopeAsync(request, cancellationToken).ConfigureAwait(false);
+        var scope = await AcquireConnectionScopeAsync(request, cancellationToken).ConfigureAwait(false);
         var command = await _commandFactory.GetCommandAsync(scope.Connection, request, cancellationToken).ConfigureAwait(false);
         ApplyScopedTransaction(request, scope, command);
         try
         {
             await ExecuteNonQueryWithFallbackAsync(request, command, cancellationToken).ConfigureAwait(false);
             var reader = GetOracleRefCursorReader(command, cursorParameterName);
-            return new DbReaderLease(reader, command, scope, _commandFactory);
+            return new DbReaderScope(reader, command, scope, _commandFactory);
         }
         catch
         {
@@ -1332,18 +1332,18 @@ public sealed class DatabaseHelper : IDatabaseHelper
         }
     }
 
-    private DbReaderLease ExecuteRefCursorCore(
+    private DbReaderScope ExecuteRefCursorCore(
         DbCommandRequest request,
         string cursorParameterName)
     {
-        var scope = LeaseScope(request);
+        var scope = AcquireConnectionScope(request);
         var command = _commandFactory.GetCommand(scope.Connection, request);
         ApplyScopedTransaction(request, scope, command);
         try
         {
             command.ExecuteNonQuery();
             var reader = GetOracleRefCursorReader(command, cursorParameterName);
-            return new DbReaderLease(reader, command, scope, _commandFactory);
+            return new DbReaderScope(reader, command, scope, _commandFactory);
         }
         catch
         {
@@ -1480,7 +1480,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         return mapper.Map;
     }
 
-    private async ValueTask<ConnectionScope> LeaseScopeAsync(DbCommandRequest request, CancellationToken cancellationToken)
+    private async ValueTask<ConnectionScope> AcquireConnectionScopeAsync(DbCommandRequest request, CancellationToken cancellationToken)
     {
         if (request.Connection is { } explicitConnection)
         {
@@ -1495,7 +1495,7 @@ public sealed class DatabaseHelper : IDatabaseHelper
         return await _connectionScopeManager.LeaseAsync(request.OverrideOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    private ConnectionScope LeaseScope(DbCommandRequest request)
+    private ConnectionScope AcquireConnectionScope(DbCommandRequest request)
     {
         if (request.Connection is { } explicitConnection)
         {

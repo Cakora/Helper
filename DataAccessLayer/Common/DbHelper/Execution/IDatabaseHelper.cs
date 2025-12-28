@@ -144,7 +144,7 @@ public interface IDatabaseHelper
     /// <param name="request">Execution request definition.</param>
     /// <param name="cancellationToken">Token that cancels the underlying provider call.</param>
     /// <returns>A lease that owns the reader/command/connection.</returns>
-    Task<DbReaderLease> ExecuteReaderAsync(
+    Task<DbReaderScope> ExecuteReaderAsync(
         DbCommandRequest request,
         CancellationToken cancellationToken = default);
 
@@ -154,7 +154,7 @@ public interface IDatabaseHelper
     /// </summary>
     /// <param name="request">Execution request definition.</param>
     /// <returns>A lease that owns the reader/command/connection.</returns>
-    DbReaderLease ExecuteReader(DbCommandRequest request);
+    DbReaderScope ExecuteReader(DbCommandRequest request);
 
     /// <summary>
     /// Streams a binary column directly into the provided <see cref="Stream"/>.
@@ -266,7 +266,7 @@ public interface IDatabaseHelper
     /// <summary>
     /// Executes a stored procedure and returns a raw reader lease.
     /// </summary>
-    Task<DbReaderLease> ExecuteStoredProcedureReaderAsync(
+    Task<DbReaderScope> ExecuteStoredProcedureReaderAsync(
         string procedureName,
         IReadOnlyList<DbParameterDefinition>? parameters = null,
         CancellationToken cancellationToken = default);
@@ -274,7 +274,7 @@ public interface IDatabaseHelper
     /// <summary>
     /// Executes a stored procedure and returns a raw reader lease.
     /// </summary>
-    DbReaderLease ExecuteStoredProcedureReader(
+    DbReaderScope ExecuteStoredProcedureReader(
         string procedureName,
         IReadOnlyList<DbParameterDefinition>? parameters = null);
 }

@@ -17,7 +17,7 @@ Use `IDatabaseHelper` for any provider-neutral SQL scenario. All APIs have sync 
 ## Common Operations
 1. **ExecuteNonQuery / ExecuteAsync** – Inserts/updates/deletes.
 2. **ExecuteScalar / ExecuteScalarAsync** – Return first column of first row.
-3. **ExecuteReader / ExecuteReaderAsync** – obtain a `DbReaderLease` when you need raw `DbDataReader` control.
+3. **ExecuteReader / ExecuteReaderAsync** – obtain a `DbReaderScope` when you need raw `DbDataReader` control.
 4. **Query / QueryAsync** – materialize records via mapper delegate.
 5. **LoadDataTable / LoadDataSet** – fill `DataTable`/`DataSet` for reporting.
 6. **StreamAsync** – sequential `IAsyncEnumerable<T>` to avoid buffering.

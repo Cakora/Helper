@@ -5,7 +5,8 @@
 ## Core Features
 
 ### Enable/Disable Guides
-- Quick toggle instructions for every optional subsystem live under `docs/feature-toggles/` (telemetry, bulk engines, EF helpers, etc.). Open the file that matches the feature you want to adjust and copy the ready-made registration snippet. Validation is always on and documented separately under `docs/feature-toggles/validation.md`.
+- Optional subsystems are opted into via the `configureServices` delegate passed to `AddDataAccessLayer`. Use it to enable telemetry, disable retries, or turn on verbose logging per host. Validation stays on globally; set `DbCommandRequest.SkipValidation = true` when a specific request must bypass validators.
+- Deployment playbooks for ADO-only hosts and EF+ADO hybrids live in `docs/dal-usage-modes.md`.
 
 ### DbHelper Folder Layout
 - `Common/DbHelper/Infrastructure` – connection factory/pool, parameter binder, command factory, and resilience strategy abstractions that every helper uses.
@@ -15,7 +16,7 @@
 
 ### 1. Database Helper (ADO.NET surface)
 - **Purpose:** single entry point for commands, scalars, queries, streaming, DataTable/DataSet loads.
-- **Key types:** `IDatabaseHelper`, `DatabaseHelper`, `DbCommandRequest`, `DbExecutionResult`, `DbQueryResult<T>`, `DbReaderLease`.
+- **Key types:** `IDatabaseHelper`, `DatabaseHelper`, `DbCommandRequest`, `DbExecutionResult`, `DbQueryResult<T>`, `DbReaderScope`.
 - **Where:** `DataAccessLayer/Common/DbHelper`, `DataAccessLayer/Common/DbHelper/Execution`.
 
 ### 2. Transactions
@@ -47,12 +48,13 @@
 
 ### 6. Optional / Manual Features
 - **Staging/hospital logic:** implemented in CoreBusiness/migration orchestration; DAL provides the plumbing (staging tables remain read/write).
+- **Provider-specific workflows:** `CoreBusiness/Workflows` contains the SQL Server/Oracle/PostgreSQL migration workflows. Register them explicitly via `CoreBusiness/DependencyInjection/ServiceCollectionExtensions.Workflows.cs` (`AddMigrationWorkflow` overloads).
 
-## Configuration & Feature Toggles
+## Configuration & Runtime Options
 
 - Global options live in `Shared.Configuration.DatabaseOptions` (provider, connection string, pooling, resilience, diagnostics).
-- Per-endpoint options (`MigrationRunnerOptions`) flow through `AddMigrationEndpoints` (or explicit `EndpointRegistration` helpers).
-- `DalFeatureDefaults` builds the `DalFeatures` manifest that toggles telemetry, detailed logging, bulk engines, EF helpers, transaction modules, and resiliency. Validation is mandatory and does not appear in the manifest.
+- Per-endpoint options (`MigrationRunnerOptions`) flow through `AddMigrationRunnerServices` (or explicit `EndpointRegistration` helpers).
+- `DalServiceRegistrationOptions` (the optional delegate on `AddDataAccessLayer`) controls telemetry, resilience, and detailed logging. Bulk engines, EF helpers, and transactions are always registered; remove their folders to ban them entirely.
 - `EndpointRuntimeOptions` exposes runtime values (connection string, timeouts, bulk batch size) via `IOptionsMonitor`.
 - ECM EF Core contexts live under `DataAccessLayer/Database/ECM/DbContexts`. `IEcmDbContextFactory` resolves the provider-specific context (`EcmSqlServerDbContext`, `EcmPostgresDbContext`, `EcmOracleDbContext`) while keeping the base API consistent.
 - See `docs/configuration.md`, `docs/migration-runner.md`, and `docs/usage-guide.md` for examples.
@@ -77,12 +79,12 @@
 
 ### Reader Lease
 - **Input:** `DbCommandRequest`.
-- **Output:** `DbReaderLease` (caller controls reader/command/connection disposal).
+- **Output:** `DbReaderScope` (caller controls reader/command/connection disposal).
 
 ### Bulk Insert/Update
 - **Input:** `BulkOperation<T>` (mapping, options, override provider) or provider-specific writer options.
 - **Output:** `BulkExecutionResult` (rows inserted, batches). Providers also expose `Write`/`WriteAsync`.
-- **Shared engines:** The same provider engines back both `IBulkWriteHelper` (ADO) and the EF extensions in `DataAccessLayer.EF.BulkExtensions` (e.g., `WriteSqlServerBulkAsync`). If you disable the bulk flag inside `DalFeatureDefaults`, both entry points go away.
+- **Shared engines:** The same provider engines back both `IBulkWriteHelper` (ADO) and the EF extensions in `DataAccessLayer.EF.BulkExtensions` (e.g., `WriteSqlServerBulkAsync`). Delete `Common/DbHelper/Bulk` if your deployment must forbid bulk writers.
 
 ### EF / LINQ Pipelines
 - **Input:** `DbContext` queries + DAL bulk helpers or `UseTransaction`.
@@ -95,5 +97,4 @@
 ## Validation & Tests
 - `DatabaseHelperIntegrationTests` cover command/query/streaming + transaction reuse.
 - `BulkWriteHelperTests` and provider writer tests cover bulk paths.
-- `DalFeatureToggleTests` ensure `DalFeatures` flags behave correctly.
 - `MigrationRunner.Tests` confirm source/destination DI wiring and runtime options.
