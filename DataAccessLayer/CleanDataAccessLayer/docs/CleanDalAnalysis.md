@@ -39,4 +39,5 @@ Next action: decide on interface split and partial class layout, then implement 
 - ✅ CleanDatabaseHelper partitioned into `Async.cs`, `Sync.cs`, and shared pipeline/helpers.
 - ✅ DI exposes all three helper interfaces.
 - ✅ Execute*/Query* shells deduplicated through shared sync/async helpers while keeping pipeline logic centralized.
-- ⏭️ Next priority: validate disposal/telemetry parity for streams and run clean build/tests after removing stale obj/bin to clear duplicate assembly attributes.
+- ✅ Clean build/tests green for the clean transaction runner.
+- ⏭️ Next priority: remove `ITransactionRunner` (no `IUnitOfWork` replacement). Inline transaction coordination via `ITransactionManager` + helper delegates where needed, update DI to drop the runner, and adjust tests/docs accordingly. Keep stream disposal/telemetry parity validation in the same pass.
