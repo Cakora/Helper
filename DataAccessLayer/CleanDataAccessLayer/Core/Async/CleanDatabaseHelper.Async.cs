@@ -61,17 +61,17 @@ public sealed partial class CleanDatabaseHelper
                     innerRequest,
                     async (context, ct) =>
                     {
-                        var pipelineLease = context.CreateLease();
+                        var pipelineScope = context.CreateScope();
                         var behavior = DbStreamUtilities.EnsureSequentialBehavior(innerRequest.CommandBehavior);
-                        var reader = await ExecuteReaderWithFallbackAsync(pipelineLease.Command, behavior, ct)
+                        var reader = await ExecuteReaderWithFallbackAsync(pipelineScope.Command, behavior, ct)
                             .ConfigureAwait(false);
-                        return new StreamingLease(pipelineLease, reader);
+                        return new StreamingScope(pipelineScope, reader);
                     },
                     onCompleted: null,
                     token)
                 .ConfigureAwait(false);
 
-            await using var streamingLease = lease;
+            await using var streamingScope = lease;
             var yielded = 0;
 
             while (true)
@@ -79,11 +79,11 @@ public sealed partial class CleanDatabaseHelper
                 bool hasRow;
                 try
                 {
-                    hasRow = await streamingLease.Reader.ReadAsync(token).ConfigureAwait(false);
+                    hasRow = await streamingScope.Reader.ReadAsync(token).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    streamingLease.MarkFailure(ex.Message);
+                    streamingScope.MarkFailure(ex.Message);
                     throw;
                 }
 
@@ -95,11 +95,11 @@ public sealed partial class CleanDatabaseHelper
                 T item;
                 try
                 {
-                    item = innerMapper(streamingLease.Reader);
+                    item = innerMapper(streamingScope.Reader);
                 }
                 catch (Exception ex)
                 {
-                    streamingLease.MarkFailure(ex.Message);
+                    streamingScope.MarkFailure(ex.Message);
                     throw;
                 }
 
@@ -107,7 +107,7 @@ public sealed partial class CleanDatabaseHelper
                 yield return item;
             }
 
-            streamingLease.RecordResult(yielded);
+            streamingScope.RecordResult(yielded);
         }
     }
 

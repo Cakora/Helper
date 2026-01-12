@@ -85,7 +85,7 @@ public sealed partial class CleanDatabaseHelper : ICleanDatabaseHelper
             context.Attach(scope, command);
 
             var result = executor(context);
-            if (!context.LeaseIssued)
+            if (!context.ScopeIssued)
             {
                 stopwatch.Stop();
                 LogInformation("Executed command {Command} in {Elapsed} ms.", label, stopwatch.ElapsedMilliseconds);
@@ -104,7 +104,7 @@ public sealed partial class CleanDatabaseHelper : ICleanDatabaseHelper
         }
         finally
         {
-            if (!context.LeaseIssued)
+            if (!context.ScopeIssued)
             {
                 if (command is not null)
                 {
@@ -146,7 +146,7 @@ public sealed partial class CleanDatabaseHelper : ICleanDatabaseHelper
             context.Attach(scope, command);
 
             var result = await executor(context, cancellationToken).ConfigureAwait(false);
-            if (!context.LeaseIssued)
+            if (!context.ScopeIssued)
             {
                 stopwatch.Stop();
                 LogInformation("Executed command {Command} in {Elapsed} ms.", label, stopwatch.ElapsedMilliseconds);
@@ -165,7 +165,7 @@ public sealed partial class CleanDatabaseHelper : ICleanDatabaseHelper
         }
         finally
         {
-            if (!context.LeaseIssued)
+            if (!context.ScopeIssued)
             {
                 if (command is not null)
                 {
@@ -207,7 +207,7 @@ public sealed partial class CleanDatabaseHelper : ICleanDatabaseHelper
 
         public DbCommand Command { get; private set; } = default!;
         public ConnectionScope Scope { get; private set; } = default!;
-        public bool LeaseIssued { get; private set; }
+        public bool ScopeIssued { get; private set; }
 
         public void Attach(ConnectionScope scope, DbCommand command)
         {
@@ -215,19 +215,19 @@ public sealed partial class CleanDatabaseHelper : ICleanDatabaseHelper
             Command = command;
         }
 
-        public PipelineLease CreateLease()
+        public PipelineScope CreateScope()
         {
-            if (LeaseIssued)
+            if (ScopeIssued)
             {
-                throw new InvalidOperationException("Pipeline lease already issued.");
+                throw new InvalidOperationException("Pipeline scope already issued.");
             }
 
-            LeaseIssued = true;
-            return new PipelineLease(_owner, _activity, _label, _logScope, _stopwatch, Command, Scope);
+            ScopeIssued = true;
+            return new PipelineScope(_owner, _activity, _label, _logScope, _stopwatch, Command, Scope);
         }
     }
 
-    private sealed class PipelineLease : IAsyncDisposable, IDisposable
+    private sealed class PipelineScope : IAsyncDisposable, IDisposable
     {
         private readonly CleanDatabaseHelper _owner;
         private readonly Activity? _activity;
@@ -236,7 +236,7 @@ public sealed partial class CleanDatabaseHelper : ICleanDatabaseHelper
         private readonly Stopwatch _stopwatch;
         private bool _disposed;
 
-        public PipelineLease(
+        public PipelineScope(
             CleanDatabaseHelper owner,
             Activity? activity,
             string label,
@@ -306,14 +306,14 @@ public sealed partial class CleanDatabaseHelper : ICleanDatabaseHelper
         }
     }
 
-    private sealed class StreamingLease : IAsyncDisposable, IDisposable
+    private sealed class StreamingScope : IAsyncDisposable, IDisposable
     {
         private bool _disposed;
-        private readonly PipelineLease _pipelineLease;
+        private readonly PipelineScope _pipelineScope;
 
-        public StreamingLease(PipelineLease lease, DbDataReader reader)
+        public StreamingScope(PipelineScope scope, DbDataReader reader)
         {
-            _pipelineLease = lease;
+            _pipelineScope = scope;
             Reader = reader;
         }
 
@@ -322,10 +322,10 @@ public sealed partial class CleanDatabaseHelper : ICleanDatabaseHelper
         public void RecordResult(int yielded)
         {
             var execution = new DbExecutionResult(Reader.RecordsAffected, null, EmptyOutputs);
-            _pipelineLease.RecordResult(execution, yielded);
+            _pipelineScope.RecordResult(execution, yielded);
         }
 
-        public void MarkFailure(string? message) => _pipelineLease.MarkFailure(message);
+        public void MarkFailure(string? message) => _pipelineScope.MarkFailure(message);
 
         public async ValueTask DisposeAsync()
         {
@@ -335,7 +335,7 @@ public sealed partial class CleanDatabaseHelper : ICleanDatabaseHelper
             }
 
             await Reader.DisposeAsync().ConfigureAwait(false);
-            await _pipelineLease.DisposeAsync().ConfigureAwait(false);
+            await _pipelineScope.DisposeAsync().ConfigureAwait(false);
             _disposed = true;
         }
 
@@ -347,7 +347,7 @@ public sealed partial class CleanDatabaseHelper : ICleanDatabaseHelper
             }
 
             Reader.Dispose();
-            _pipelineLease.Dispose();
+            _pipelineScope.Dispose();
             _disposed = true;
         }
     }

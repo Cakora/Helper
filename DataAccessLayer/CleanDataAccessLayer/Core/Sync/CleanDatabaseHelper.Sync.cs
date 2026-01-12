@@ -57,15 +57,15 @@ public sealed partial class CleanDatabaseHelper
                 request,
                 context =>
                 {
-                    var pipelineLease = context.CreateLease();
+                    var pipelineScope = context.CreateScope();
                     var behavior = DbStreamUtilities.EnsureSequentialBehavior(request.CommandBehavior);
-                    var reader = ExecuteReaderWithFallback(pipelineLease.Command, behavior, cancellationToken);
-                    return new StreamingLease(pipelineLease, reader);
+                    var reader = ExecuteReaderWithFallback(pipelineScope.Command, behavior, cancellationToken);
+                    return new StreamingScope(pipelineScope, reader);
                 },
                 onCompleted: null,
                 cancellationToken);
 
-            using var streamingLease = lease;
+            using var streamingScope = lease;
             var yielded = 0;
             while (true)
             {
@@ -73,11 +73,11 @@ public sealed partial class CleanDatabaseHelper
                 bool hasRow;
                 try
                 {
-                    hasRow = streamingLease.Reader.Read();
+                    hasRow = streamingScope.Reader.Read();
                 }
                 catch (Exception ex)
                 {
-                    streamingLease.MarkFailure(ex.Message);
+                    streamingScope.MarkFailure(ex.Message);
                     throw;
                 }
 
@@ -89,11 +89,11 @@ public sealed partial class CleanDatabaseHelper
                 T item;
                 try
                 {
-                    item = mapper(streamingLease.Reader);
+                    item = mapper(streamingScope.Reader);
                 }
                 catch (Exception ex)
                 {
-                    streamingLease.MarkFailure(ex.Message);
+                    streamingScope.MarkFailure(ex.Message);
                     throw;
                 }
 
@@ -101,7 +101,7 @@ public sealed partial class CleanDatabaseHelper
                 yield return item;
             }
 
-            streamingLease.RecordResult(yielded);
+            streamingScope.RecordResult(yielded);
         }
     }
 
