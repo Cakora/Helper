@@ -18,11 +18,10 @@ This log captures incremental passes over the current clean DAL to prep a refact
 - Command creation uses the shared factory, so provider-specific behaviors (list expansion, type mapping) remain centralized. Preserve this by keeping provider glue in `Providers/` instead of branching inside the helper.
 
 ## Pass 4 — Proposed Layout (post-split)
-- `Abstractions/` — `ICleanDatabaseHelperAsync`, `ICleanDatabaseHelperSync`, `ITransactionRunner`.
+- `Abstractions/` — `ICleanDatabaseHelperAsync`, `ICleanDatabaseHelperSync`.
 - `Core/Async/` — `CleanDatabaseHelper.Async.cs` (async public API + async pipeline hooks).
 - `Core/Sync/` — `CleanDatabaseHelper.Sync.cs` (sync public API + sync pipeline hooks).
 - `Core/Shared/` — pipeline/context/lease types, validation, resilience helpers, telemetry/logging helpers.
-- `Transactions/` — `CleanTransactionRunner` (optionally partial if async/sync paths diverge).
 - `Facade/` — DI extensions registering either async-only, sync-only, or dual façade.
 - `Requests/`, `Telemetry/`, `Providers/` — remain provider-agnostic; add provider-specific shims only under `Providers/`.
 
@@ -36,8 +35,9 @@ Next action: decide on interface split and partial class layout, then implement 
 
 ## Current Completion Status
 - ✅ Interfaces split (`ICleanDatabaseHelperAsync`/`Sync`) with combined façade.
-- ✅ CleanDatabaseHelper partitioned into `Async.cs`, `Sync.cs`, and shared pipeline/helpers.
+- ✅ CleanDatabaseHelper partitioned into `Async/`, `Sync/`, and shared pipeline/helpers folders.
 - ✅ DI exposes all three helper interfaces.
 - ✅ Execute*/Query* shells deduplicated through shared sync/async helpers while keeping pipeline logic centralized.
-- ✅ Clean build/tests green for the clean transaction runner.
-- ⏭️ Next priority: remove `ITransactionRunner` (no `IUnitOfWork` replacement). Inline transaction coordination via `ITransactionManager` + helper delegates where needed, update DI to drop the runner, and adjust tests/docs accordingly. Keep stream disposal/telemetry parity validation in the same pass.
+- ✅ Runner abstraction removed; transaction guidance is inline via `ITransactionManager`.
+- ✅ Clean build/tests green after refactors.
+- ⏭️ Next priority: add inline transaction examples/tests and verify stream disposal/telemetry parity.

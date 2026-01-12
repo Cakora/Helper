@@ -21,7 +21,7 @@ This guide documents how to restructure the Clean Data Access Layer so synchrono
 |--------|---------|-------|
 | `Abstractions/` | Interfaces (`ICleanDatabaseHelper`, `ITransactionRunner`) that define the public surface. | Only *contracts* live here—no implementations. |
 | `Core/` | Primary implementations such as `CleanDatabaseHelper` and transaction coordination. | Split into logical regions (`Pipeline`, `Helpers`) but only covers async paths today. |
-| `Core/Transactions/` | Transaction runner that orchestrates work inside `ITransactionManager` scopes. | Provides a single entry point for multi-command workflows. |
+| `Core/Transactions/` | (Removed) Transaction runner no longer required; inline coordination uses `ITransactionManager` directly. | Keep transaction guidance in docs/tests only. |
 | `Facade/` | Optional high-level entry points that compose helpers into a façade for consumers. | Keeps UI/business layers unaware of implementation detail. |
 | `Providers/` | Provider-specific glue (e.g., connection factories) so Core stays provider-agnostic. | Each provider gets its own subfolder if customization is required. |
 | `Requests/` | Builders and request DTOs (`DbCommandRequestBuilder`) that standardize parameter creation. | Shared by sync + async code, so keep them framework-neutral. |
@@ -132,7 +132,22 @@ Inside large files:
 ## 6. Rollout Sequence
 
 1. Implement sync façade inside `CleanDatabaseHelper`.
-2. Update `CleanTransactionRunner` to expose sync overloads (`Execute(ICleanDatabaseHelperSync helper, CancellationToken token)`).
+2. Coordinate multi-command workflows inline via `ITransactionManager` (no separate runner). Reuse the helper instance to ensure shared scopes:
+   ```csharp
+   await using var scope = await transactionManager.BeginAsync(options: dbOptions, cancellationToken);
+   try
+   {
+       await helper.ExecuteAsync(insertUserRequest, cancellationToken);
+       await helper.ExecuteAsync(updateInventoryRequest, cancellationToken);
+       await helper.ExecuteScalarAsync(loadAuditRequest, cancellationToken);
+       await scope.CommitAsync(cancellationToken);
+   }
+   catch (Exception ex)
+   {
+       await scope.RollbackAsync(cancellationToken);
+       throw new DataException("Transactional workflow failed.", ex);
+   }
+   ```
 3. Migrate consumers gradually by injecting the façade that implements both sync and async interfaces.
 4. Once parity is validated, deprecate direct usage of legacy helpers in `DataAccessLayer/Common/DbHelper`.
 5. Provider rollout order: **SQL Server first**, followed by Oracle, then PostgreSQL; defer any additional provider implementations until these three are production-ready.

@@ -1,7 +1,6 @@
 using System;
 using DataAccessLayer.Clean.Abstractions;
 using DataAccessLayer.Clean.Core;
-using DataAccessLayer.Clean.Core.Transactions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DataAccessLayer.Clean.Facade;
@@ -21,8 +20,6 @@ public static class CleanDalServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         RegisterCoreAbstractions(services);
-        RegisterTransactionPipeline(services);
-
         return services;
     }
 
@@ -34,12 +31,6 @@ public static class CleanDalServiceCollectionExtensions
         services.AddScoped<ICleanDatabaseHelper, CleanDatabaseHelper>();
         services.AddScoped<ICleanDatabaseHelperAsync>(sp => (ICleanDatabaseHelperAsync)sp.GetRequiredService<ICleanDatabaseHelper>());
         services.AddScoped<ICleanDatabaseHelperSync>(sp => (ICleanDatabaseHelperSync)sp.GetRequiredService<ICleanDatabaseHelper>());
-    }
-
-    private static void RegisterTransactionPipeline(IServiceCollection services)
-    {
-        // ITransactionRunner -> CleanTransactionRunner (scoped to share the helper and transaction manager per request).
-        services.AddScoped<ITransactionRunner, CleanTransactionRunner>();
     }
 
     #endregion
