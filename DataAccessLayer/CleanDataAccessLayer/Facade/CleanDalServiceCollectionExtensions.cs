@@ -32,6 +32,8 @@ public static class CleanDalServiceCollectionExtensions
     {
         // ICleanDatabaseHelper -> CleanDatabaseHelper (scoped per request to reuse scoped connections/telemetry).
         services.AddScoped<ICleanDatabaseHelper, CleanDatabaseHelper>();
+        services.AddScoped<ICleanDatabaseHelperAsync>(sp => (ICleanDatabaseHelperAsync)sp.GetRequiredService<ICleanDatabaseHelper>());
+        services.AddScoped<ICleanDatabaseHelperSync>(sp => (ICleanDatabaseHelperSync)sp.GetRequiredService<ICleanDatabaseHelper>());
     }
 
     private static void RegisterTransactionPipeline(IServiceCollection services)
