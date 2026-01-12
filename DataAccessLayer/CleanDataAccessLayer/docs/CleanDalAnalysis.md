@@ -33,3 +33,10 @@ This log captures incremental passes over the current clean DAL to prep a refact
 - Current state: interfaces are split and the helper is partial across Async/Sync/Shared files; DI now exposes all three interfaces to consumers.
 
 Next action: decide on interface split and partial class layout, then implement the shared pipeline extraction to eliminate repeated Execute*/Query* shells without increasing overall line count.
+
+## Current Completion Status
+- ✅ Interfaces split (`ICleanDatabaseHelperAsync`/`Sync`) with combined façade.
+- ✅ CleanDatabaseHelper partitioned into `Async.cs`, `Sync.cs`, and shared pipeline/helpers.
+- ✅ DI exposes all three helper interfaces.
+- ✅ Execute*/Query* shells deduplicated through shared sync/async helpers while keeping pipeline logic centralized.
+- ⏭️ Next priority: validate disposal/telemetry parity for streams and run clean build/tests after removing stale obj/bin to clear duplicate assembly attributes.

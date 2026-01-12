@@ -15,29 +15,19 @@ public sealed partial class CleanDatabaseHelper
     public DbExecutionResult Execute(
         DbCommandRequest request,
         CancellationToken cancellationToken = default) =>
-        ExecutePipeline(
+        RunExecution(
             nameof(Execute),
             request,
-            context =>
-            {
-                var rows = ExecuteNonQueryWithFallback(context.Command, cancellationToken);
-                return new DbExecutionResult(rows, null, ExtractOutputs(context.Command));
-            },
-            RecordResult,
+            command => new DbExecutionResult(ExecuteNonQueryWithFallback(command, cancellationToken), null, ExtractOutputs(command)),
             cancellationToken);
 
     public DbExecutionResult ExecuteScalar(
         DbCommandRequest request,
         CancellationToken cancellationToken = default) =>
-        ExecutePipeline(
+        RunExecution(
             nameof(ExecuteScalar),
             request,
-            context =>
-            {
-                var scalar = ExecuteScalarWithFallback(context.Command, cancellationToken);
-                return new DbExecutionResult(-1, scalar, ExtractOutputs(context.Command));
-            },
-            RecordResult,
+            command => new DbExecutionResult(-1, ExecuteScalarWithFallback(command, cancellationToken), ExtractOutputs(command)),
             cancellationToken);
 
     public DbQueryResult<IReadOnlyList<T>> Query<T>(
@@ -46,28 +36,7 @@ public sealed partial class CleanDatabaseHelper
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(mapper);
-        return ExecutePipeline(
-            nameof(Query),
-            request,
-            context =>
-            {
-                var behavior = request.CommandBehavior == CommandBehavior.Default
-                    ? CommandBehavior.Default
-                    : request.CommandBehavior;
-
-                using var reader = ExecuteReaderWithFallback(context.Command, behavior, cancellationToken);
-                var items = new List<T>();
-                while (reader.Read())
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    items.Add(mapper(reader));
-                }
-
-                var execution = new DbExecutionResult(reader.RecordsAffected, null, ExtractOutputs(context.Command));
-                return new DbQueryResult<IReadOnlyList<T>>(items, execution);
-            },
-            (activity, result) => _telemetry.RecordCommandResult(activity, result.Execution, result.Data.Count),
-            cancellationToken);
+        return RunQuery(nameof(Query), request, mapper, cancellationToken);
     }
 
     public IEnumerable<T> Stream<T>(
@@ -133,5 +102,47 @@ public sealed partial class CleanDatabaseHelper
 
             streamingLease.RecordResult(yielded);
         }
+    }
+
+    private DbExecutionResult RunExecution(
+        string operation,
+        DbCommandRequest request,
+        Func<DbCommand, DbExecutionResult> executor,
+        CancellationToken cancellationToken) =>
+        ExecutePipeline(
+            operation,
+            request,
+            context => executor(context.Command),
+            RecordResult,
+            cancellationToken);
+
+    private DbQueryResult<IReadOnlyList<T>> RunQuery<T>(
+        string operation,
+        DbCommandRequest request,
+        Func<DbDataReader, T> mapper,
+        CancellationToken cancellationToken)
+    {
+        return ExecutePipeline(
+            operation,
+            request,
+            context =>
+            {
+                var behavior = request.CommandBehavior == CommandBehavior.Default
+                    ? CommandBehavior.Default
+                    : request.CommandBehavior;
+
+                using var reader = ExecuteReaderWithFallback(context.Command, behavior, cancellationToken);
+                var items = new List<T>();
+                while (reader.Read())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    items.Add(mapper(reader));
+                }
+
+                var execution = new DbExecutionResult(reader.RecordsAffected, null, ExtractOutputs(context.Command));
+                return new DbQueryResult<IReadOnlyList<T>>(items, execution);
+            },
+            (activity, result) => _telemetry.RecordCommandResult(activity, result.Execution, result.Data.Count),
+            cancellationToken);
     }
 }

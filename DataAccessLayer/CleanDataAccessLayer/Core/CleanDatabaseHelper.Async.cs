@@ -17,30 +17,19 @@ public sealed partial class CleanDatabaseHelper
     public Task<DbExecutionResult> ExecuteAsync(
         DbCommandRequest request,
         CancellationToken cancellationToken = default) =>
-        ExecutePipelineAsync(
-            nameof(ExecuteAsync),
-            request,
-            async (context, token) =>
-            {
-                var rows = await ExecuteNonQueryWithFallbackAsync(context.Command, token).ConfigureAwait(false);
-                return new DbExecutionResult(rows, null, ExtractOutputs(context.Command));
-            },
-            RecordResult,
+        RunExecutionAsync(nameof(ExecuteAsync), request, (command, token) =>
+            ExecuteNonQueryWithFallbackAsync(command, token)
+                .ContinueWith(t => new DbExecutionResult(t.Result, null, ExtractOutputs(command)), cancellationToken, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default),
             cancellationToken);
 
     public Task<DbExecutionResult> ExecuteScalarAsync(
         DbCommandRequest request,
         CancellationToken cancellationToken = default) =>
-        ExecutePipelineAsync(
-            nameof(ExecuteScalarAsync),
-            request,
-            async (context, token) =>
-            {
-                var scalar = await ExecuteScalarWithFallbackAsync(context.Command, token).ConfigureAwait(false);
-                return new DbExecutionResult(-1, scalar, ExtractOutputs(context.Command));
-            },
-            RecordResult,
-            cancellationToken);
+        RunExecutionAsync(nameof(ExecuteScalarAsync), request, async (command, token) =>
+        {
+            var scalar = await ExecuteScalarWithFallbackAsync(command, token).ConfigureAwait(false);
+            return new DbExecutionResult(-1, scalar, ExtractOutputs(command));
+        }, cancellationToken);
 
     public Task<DbQueryResult<IReadOnlyList<T>>> QueryAsync<T>(
         DbCommandRequest request,
@@ -48,28 +37,7 @@ public sealed partial class CleanDatabaseHelper
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(mapper);
-        return ExecutePipelineAsync(
-            nameof(QueryAsync),
-            request,
-            async (context, token) =>
-            {
-                var behavior = request.CommandBehavior == CommandBehavior.Default
-                    ? CommandBehavior.Default
-                    : request.CommandBehavior;
-
-                await using var reader = await ExecuteReaderWithFallbackAsync(context.Command, behavior, token)
-                    .ConfigureAwait(false);
-                var items = new List<T>();
-                while (await reader.ReadAsync(token).ConfigureAwait(false))
-                {
-                    items.Add(mapper(reader));
-                }
-
-                var execution = new DbExecutionResult(reader.RecordsAffected, null, ExtractOutputs(context.Command));
-                return new DbQueryResult<IReadOnlyList<T>>(items, execution);
-            },
-            (activity, result) => _telemetry.RecordCommandResult(activity, result.Execution, result.Data.Count),
-            cancellationToken);
+        return RunQueryAsync(nameof(QueryAsync), request, mapper, cancellationToken);
     }
 
     public IAsyncEnumerable<T> StreamAsync<T>(
@@ -139,5 +107,47 @@ public sealed partial class CleanDatabaseHelper
 
             streamingLease.RecordResult(yielded);
         }
+    }
+
+    private Task<DbExecutionResult> RunExecutionAsync(
+        string operation,
+        DbCommandRequest request,
+        Func<DbCommand, CancellationToken, Task<DbExecutionResult>> executor,
+        CancellationToken cancellationToken) =>
+        ExecutePipelineAsync(
+            operation,
+            request,
+            (context, token) => executor(context.Command, token),
+            RecordResult,
+            cancellationToken);
+
+    private Task<DbQueryResult<IReadOnlyList<T>>> RunQueryAsync<T>(
+        string operation,
+        DbCommandRequest request,
+        Func<DbDataReader, T> mapper,
+        CancellationToken cancellationToken)
+    {
+        return ExecutePipelineAsync(
+            operation,
+            request,
+            async (context, token) =>
+            {
+                var behavior = request.CommandBehavior == CommandBehavior.Default
+                    ? CommandBehavior.Default
+                    : request.CommandBehavior;
+
+                await using var reader = await ExecuteReaderWithFallbackAsync(context.Command, behavior, token)
+                    .ConfigureAwait(false);
+                var items = new List<T>();
+                while (await reader.ReadAsync(token).ConfigureAwait(false))
+                {
+                    items.Add(mapper(reader));
+                }
+
+                var execution = new DbExecutionResult(reader.RecordsAffected, null, ExtractOutputs(context.Command));
+                return new DbQueryResult<IReadOnlyList<T>>(items, execution);
+            },
+            (activity, result) => _telemetry.RecordCommandResult(activity, result.Execution, result.Data.Count),
+            cancellationToken);
     }
 }
