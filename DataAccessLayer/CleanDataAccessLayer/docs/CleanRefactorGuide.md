@@ -78,6 +78,7 @@ This guide documents how to restructure the Clean Data Access Layer so synchrono
    { … }
    ```
 3. Register these interfaces in a dedicated DI extension (see `Facade/CleanDalServiceCollectionExtensions.cs`) so service wiring remains centralized, categorized, and well-commented.
+4. The current baseline keeps both sync and async members on `ICleanDatabaseHelper` for parity; split only when usage patterns justify it to avoid unnecessary wiring churn.
 
 ### Step 4 — Use Regions Consistently
 Inside large files:

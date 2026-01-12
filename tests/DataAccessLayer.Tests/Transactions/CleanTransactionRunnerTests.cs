@@ -144,5 +144,23 @@ public sealed class CleanTransactionRunnerTests
             Func<DbDataReader, T> mapper,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public DbExecutionResult Execute(DbCommandRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public DbExecutionResult ExecuteScalar(DbCommandRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public DbQueryResult<IReadOnlyList<T>> Query<T>(
+            DbCommandRequest request,
+            Func<DbDataReader, T> mapper,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public IEnumerable<T> Stream<T>(
+            DbCommandRequest request,
+            Func<DbDataReader, T> mapper,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }

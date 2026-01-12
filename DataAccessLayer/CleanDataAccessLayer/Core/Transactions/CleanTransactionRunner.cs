@@ -27,6 +27,8 @@ public sealed class CleanTransactionRunner : ITransactionRunner
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
+    #region Public API
+
     public void Execute(
         Action<ICleanDatabaseHelper, CancellationToken> work,
         CancellationToken cancellationToken = default) =>
@@ -58,6 +60,8 @@ public sealed class CleanTransactionRunner : ITransactionRunner
         Func<ICleanDatabaseHelper, CancellationToken, Task<TResult>> work,
         CancellationToken cancellationToken = default) =>
         ExecuteInternalAsync(work, cancellationToken);
+
+    #endregion
 
     private TResult ExecuteInternal<TResult>(
         Func<ICleanDatabaseHelper, CancellationToken, TResult> work,

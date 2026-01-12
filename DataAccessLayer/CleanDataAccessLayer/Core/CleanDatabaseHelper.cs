@@ -59,6 +59,8 @@ public sealed class CleanDatabaseHelper : ICleanDatabaseHelper
         _defaultOptions = defaultOptions ?? throw new ArgumentNullException(nameof(defaultOptions));
     }
 
+    #region Public API - Async
+
     public Task<DbExecutionResult> ExecuteAsync(
         DbCommandRequest request,
         CancellationToken cancellationToken = default) =>
@@ -116,6 +118,79 @@ public sealed class CleanDatabaseHelper : ICleanDatabaseHelper
             (activity, result) => _telemetry.RecordCommandResult(activity, result.Execution, result.Data.Count),
             cancellationToken);
     }
+
+    public IAsyncEnumerable<T> StreamAsync<T>(
+        DbCommandRequest request,
+        Func<DbDataReader, T> mapper,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(mapper);
+        ValidateRequest(request);
+        return StreamCoreAsync(request, mapper, cancellationToken);
+
+        async IAsyncEnumerable<T> StreamCoreAsync(
+            DbCommandRequest innerRequest,
+            Func<DbDataReader, T> innerMapper,
+            [EnumeratorCancellation] CancellationToken token)
+        {
+            var lease = await ExecutePipelineAsync(
+                    nameof(StreamAsync),
+                    innerRequest,
+                    async (context, ct) =>
+                    {
+                        var pipelineLease = context.CreateLease();
+                        var behavior = DbStreamUtilities.EnsureSequentialBehavior(innerRequest.CommandBehavior);
+                        var reader = await ExecuteReaderWithFallbackAsync(pipelineLease.Command, behavior, ct)
+                            .ConfigureAwait(false);
+                        return new StreamingLease(pipelineLease, reader);
+                    },
+                    onCompleted: null,
+                    token)
+                .ConfigureAwait(false);
+
+            await using var streamingLease = lease;
+            var yielded = 0;
+
+            while (true)
+            {
+                bool hasRow;
+                try
+                {
+                    hasRow = await streamingLease.Reader.ReadAsync(token).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    streamingLease.MarkFailure(ex.Message);
+                    throw;
+                }
+
+                if (!hasRow)
+                {
+                    break;
+                }
+
+                T item;
+                try
+                {
+                    item = innerMapper(streamingLease.Reader);
+                }
+                catch (Exception ex)
+                {
+                    streamingLease.MarkFailure(ex.Message);
+                    throw;
+                }
+
+                yielded++;
+                yield return item;
+            }
+
+            streamingLease.RecordResult(yielded);
+        }
+    }
+
+    #endregion
+
+    #region Public API - Sync
 
     public DbExecutionResult Execute(
         DbCommandRequest request,
@@ -240,74 +315,7 @@ public sealed class CleanDatabaseHelper : ICleanDatabaseHelper
         }
     }
 
-    public IAsyncEnumerable<T> StreamAsync<T>(
-        DbCommandRequest request,
-        Func<DbDataReader, T> mapper,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(mapper);
-        ValidateRequest(request);
-        return StreamCoreAsync(request, mapper, cancellationToken);
-
-        async IAsyncEnumerable<T> StreamCoreAsync(
-            DbCommandRequest innerRequest,
-            Func<DbDataReader, T> innerMapper,
-            [EnumeratorCancellation] CancellationToken token)
-        {
-            var lease = await ExecutePipelineAsync(
-                    nameof(StreamAsync),
-                    innerRequest,
-                    async (context, ct) =>
-                    {
-                        var pipelineLease = context.CreateLease();
-                        var behavior = DbStreamUtilities.EnsureSequentialBehavior(innerRequest.CommandBehavior);
-                        var reader = await ExecuteReaderWithFallbackAsync(pipelineLease.Command, behavior, ct)
-                            .ConfigureAwait(false);
-                        return new StreamingLease(pipelineLease, reader);
-                    },
-                    onCompleted: null,
-                    token)
-                .ConfigureAwait(false);
-
-            await using var streamingLease = lease;
-            var yielded = 0;
-
-            while (true)
-            {
-                bool hasRow;
-                try
-                {
-                    hasRow = await streamingLease.Reader.ReadAsync(token).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    streamingLease.MarkFailure(ex.Message);
-                    throw;
-                }
-
-                if (!hasRow)
-                {
-                    break;
-                }
-
-                T item;
-                try
-                {
-                    item = innerMapper(streamingLease.Reader);
-                }
-                catch (Exception ex)
-                {
-                    streamingLease.MarkFailure(ex.Message);
-                    throw;
-                }
-
-                yielded++;
-                yield return item;
-            }
-
-            streamingLease.RecordResult(yielded);
-        }
-    }
+    #endregion
 
     #region Pipeline
 
