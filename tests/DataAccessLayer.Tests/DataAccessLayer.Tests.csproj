@@ -15,6 +15,7 @@
     <PackageReference Include="Oracle.ManagedDataAccess.Core" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\DataAccessLayer\CleanDataAccessLayer\CleanDataAccessLayer.csproj" />
     <ProjectReference Include="..\..\DataAccessLayer\DataAccessLayer.csproj" />
   </ItemGroup>
 </Project>
