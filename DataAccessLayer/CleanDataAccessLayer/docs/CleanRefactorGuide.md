@@ -20,7 +20,7 @@ This guide documents how to restructure the Clean Data Access Layer so synchrono
 | Folder | Purpose | Notes |
 |--------|---------|-------|
 | `Abstractions/` | Interfaces (`ICleanDatabaseHelper`, `ITransactionRunner`) that define the public surface. | Only *contracts* live here—no implementations. |
-| `Core/` | Primary implementations such as `CleanDatabaseHelper` and transaction coordination. | Split into logical regions (`Pipeline`, `Helpers`) but only covers async paths today. |
+| `Core/` | Primary implementations such as `CleanDatabaseHelper` and transaction coordination. | Single-file helper (sync + async + streaming) with shared Run/RunAsync pipelines; transaction runner removed. |
 | `Core/Transactions/` | (Removed) Transaction runner no longer required; inline coordination uses `ITransactionManager` directly. | Keep transaction guidance in docs/tests only. |
 | `Facade/` | Optional high-level entry points that compose helpers into a façade for consumers. | Keeps UI/business layers unaware of implementation detail. |
 | `Providers/` | Provider-specific glue (e.g., connection factories) so Core stays provider-agnostic. | Each provider gets its own subfolder if customization is required. |
@@ -44,8 +44,8 @@ This guide documents how to restructure the Clean Data Access Layer so synchrono
 ## 3. Step-by-Step Plan
 
 ### Step 1 — Extract Shared Operation Kernels
-1. Move all command-building, telemetry, and transaction plumbing into **private kernel methods** that accept delegates (already started via `ExecutePipelineAsync`).
-2. Keep the kernel `internal` so `TransactionTestHelpers` can hit it directly when needed.
+1. Keep command-building, telemetry, and transaction plumbing in **private kernel methods** that accept delegates (Run/RunAsync already handle this).
+2. Keep the kernel `internal` so `TransactionTestHelpers` can hit it directly when needed (when added).
 
 ### Step 2 — Layer Async and Sync Facades
 1. **Async façade** (existing) calls the kernel with async delegates—keep the *same* `Execute*`/`Query*`/`Stream*` naming so consumers do not learn new method names.
