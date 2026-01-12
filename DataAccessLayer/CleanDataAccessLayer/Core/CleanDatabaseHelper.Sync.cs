@@ -4,6 +4,7 @@ using System.Data;
 using System.Data.Common;
 using System.Threading;
 using DataAccessLayer.Execution;
+using Shared.IO;
 
 namespace DataAccessLayer.Clean.Core;
 
